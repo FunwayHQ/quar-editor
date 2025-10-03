@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Design System Colors */
+    --background: #0A0A0B;
+    --panel: #18181B;
+    --panel-80: rgba(24, 24, 27, 0.8);
+    --border: #27272A;
+    --text-primary: #FAFAFA;
+    --text-secondary: #A1A1AA;
+    --accent: #7C3AED;
+    --accent-light: #A855F7;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --error: #EF4444;
+
+    /* Collaboration Colors */
+    --collab-pink: #EC4899;
+    --collab-blue: #3B82F6;
+    --collab-green: #10B981;
+    --collab-orange: #F59E0B;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-text-primary;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-sans;
+  }
+
+  code, pre {
+    @apply font-mono;
+  }
+}
+
+@layer components {
+  /* Glassmorphism effect */
+  .glass {
+    @apply bg-panel-80 backdrop-blur-glass border border-border rounded shadow-glass;
+  }
+
+  /* Selection glow effect */
+  .selection-glow {
+    @apply ring-2 ring-accent shadow-glow;
+  }
+
+  /* Panel styling */
+  .panel {
+    @apply glass;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply bg-gradient-to-r from-accent to-accent-light text-white px-4 py-2 rounded font-medium;
+    @apply hover:opacity-90 active:opacity-80 transition-opacity;
+  }
+
+  .btn-secondary {
+    @apply bg-panel border border-border text-text-primary px-4 py-2 rounded font-medium;
+    @apply hover:bg-opacity-80 active:bg-opacity-70 transition-all;
+  }
+
+  .btn-ghost {
+    @apply text-text-primary px-4 py-2 rounded font-medium;
+    @apply hover:bg-panel active:bg-opacity-70 transition-all;
+  }
+
+  /* Input styling */
+  .input {
+    @apply bg-panel border border-border text-text-primary px-3 py-2 rounded;
+    @apply focus:outline-none focus:ring-2 focus:ring-accent;
+  }
+
+  /* Scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-border rounded;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-accent;
+  }
+
+  /* Status indicators */
+  .status-online {
+    @apply bg-success;
+  }
+
+  .status-offline {
+    @apply bg-text-secondary;
+  }
+
+  .status-error {
+    @apply bg-error;
+  }
+}
+
+@layer utilities {
+  /* Grid spacing utilities */
+  .spacing-grid {
+    gap: var(--grid, 16px);
+  }
+
+  /* Text utilities */
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent to-accent-light bg-clip-text text-transparent;
+  }
+
+  /* Loading animation */
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  /* Fade in animation */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in;
+  }
+
+  /* Slide in animation */
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-in-right {
+    animation: slideInRight 0.3s ease-out;
+  }
+}
+
+/* Three.js canvas styling */
+canvas {
+  outline: none;
+  touch-action: none;
+}
