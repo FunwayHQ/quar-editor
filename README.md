@@ -6,8 +6,9 @@ A next-generation, web-based 3D design platform that runs 100% in your browser. 
 
 ✅ **Full 3D Editing** - Create, transform, and manipulate 3D objects
 ✅ **Material System** - PBR materials with texture support
-✅ **Animation Timeline** - Keyframe animation with curve editor
-✅ **Visual Scripting** - Node-based state machine for interactions
+✅ **Lighting & Environment** - HDRI, IBL, multiple light types
+✅ **Animation Timeline** - Keyframe animation with bezier curve editor
+✅ **Polygon Editing** - Vertex/edge/face manipulation (MVP)
 ✅ **File Import/Export** - GLB, GLTF, FBX, OBJ, USDZ support
 ✅ **100% Offline** - Works without internet (PWA)
 ✅ **Privacy-First** - All data stays on your device
@@ -149,11 +150,13 @@ MIT License - see [LICENSE](LICENSE) for details.
 | 3D Editing | ✅ | ✅ |
 | Materials & Lighting | ✅ | ✅ |
 | Animation | ✅ | ✅ |
-| Visual Scripting | ✅ | ✅ |
+| Polygon Editing (MVP) | ✅ | ✅ Advanced |
+| Export Formats | ✅ | ✅ |
+| Visual Scripting | ❌ | ✅ (Premium) |
 | Storage | IndexedDB (local) | Cloud + S3 |
 | Collaboration | ❌ | ✅ Real-time |
 | Version History | Manual `.quar` files | ✅ Git-like |
-| AI Generation | ⚠️ (Bring your own API key) | ✅ Built-in |
+| AI Generation | ❌ | ✅ Built-in |
 | Authentication | ❌ | ✅ |
 | Cost | Free forever | Freemium |
 
