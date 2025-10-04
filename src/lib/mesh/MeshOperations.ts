@@ -6,6 +6,7 @@
  */
 
 import * as THREE from 'three';
+import { splitTriangleAlongCut } from '../geometry/TriangulationUtils';
 
 export interface ExtrudeOptions {
   distance: number;
@@ -22,6 +23,11 @@ export interface BevelOptions {
 export interface LoopCutOptions {
   position: number; // 0-1, position along the edge loop
   numberOfCuts?: number;
+}
+
+export interface KnifeCutOptions {
+  snapToVertices?: boolean;
+  snapThreshold?: number;
 }
 
 export class MeshOperations {
@@ -626,5 +632,208 @@ export class MeshOperations {
     geometry.computeBoundingSphere();
 
     console.log(`Bridged ${edgeLoop1.length} edge pairs`);
+  }
+
+  /**
+   * Knife cut - Split faces along a drawn path
+   */
+  static knifeCut(
+    geometry: THREE.BufferGeometry,
+    intersectionPoints: Array<{ point: THREE.Vector3; faceIndex: number; edgeIndex?: number }>,
+    options: KnifeCutOptions = {}
+  ): void {
+    if (intersectionPoints.length < 1) {
+      console.warn('Knife cut requires at least 1 intersection point');
+      return;
+    }
+
+    if (!geometry.index) {
+      console.warn('Knife cut requires indexed geometry');
+      return;
+    }
+
+    const positions = geometry.attributes.position;
+    const indices = geometry.index;
+    const vertexCount = positions.count;
+
+    console.log('[KnifeCut] Processing', intersectionPoints.length, 'intersection points across faces');
+
+    // For a simple cut across multiple faces, we need to add edge splits
+    // Simplified approach: If we have 2 intersections on different faces,
+    // we'll split both faces and connect them
+
+    // Group intersections by face (preserve edgeIndex)
+    const faceIntersections = new Map<number, Array<{ point: THREE.Vector3; edgeIndex?: number }>>();
+    intersectionPoints.forEach(int => {
+      if (!faceIntersections.has(int.faceIndex)) {
+        faceIntersections.set(int.faceIndex, []);
+      }
+      faceIntersections.get(int.faceIndex)!.push({
+        point: int.point,
+        edgeIndex: int.edgeIndex,
+      });
+    });
+
+    console.log('[KnifeCut] Affects', faceIntersections.size, 'faces');
+
+    const newPositions: number[] = [];
+    const newIndices: number[] = [];
+    let newVertexIndex = 0;
+
+    // Copy all existing vertices
+    for (let i = 0; i < vertexCount; i++) {
+      newPositions.push(
+        positions.getX(i),
+        positions.getY(i),
+        positions.getZ(i)
+      );
+      newVertexIndex++;
+    }
+
+    // Process each face
+    const faceCount = indices.count / 3;
+    for (let faceIdx = 0; faceIdx < faceCount; faceIdx++) {
+      const intersects = faceIntersections.get(faceIdx);
+
+      if (!intersects || intersects.length === 0) {
+        // Face not affected by cut - copy as-is
+        const i = faceIdx * 3;
+        newIndices.push(
+          indices.getX(i),
+          indices.getX(i + 1),
+          indices.getX(i + 2)
+        );
+      } else if (intersects.length === 1) {
+        // Face has 1 intersection point - this is a simplified case
+        // For now, copy the face as-is
+        // TODO: Handle single intersection (cut entering or exiting face)
+        const i = faceIdx * 3;
+        newIndices.push(
+          indices.getX(i),
+          indices.getX(i + 1),
+          indices.getX(i + 2)
+        );
+        console.log(`[KnifeCut] Face ${faceIdx} has 1 intersection - keeping as-is (TODO: implement single-point split)`);
+      } else if (intersects.length >= 2) {
+        // Face has 2+ intersection points - split it
+        // Use only first 2 intersections
+        const i = faceIdx * 3;
+        const v0Idx = indices.getX(i);
+        const v1Idx = indices.getX(i + 1);
+        const v2Idx = indices.getX(i + 2);
+
+        const v0 = new THREE.Vector3().fromBufferAttribute(positions, v0Idx);
+        const v1 = new THREE.Vector3().fromBufferAttribute(positions, v1Idx);
+        const v2 = new THREE.Vector3().fromBufferAttribute(positions, v2Idx);
+
+        // Create new vertices at intersection points IN LOCAL SPACE
+        const cut1World = intersects[0].point;
+        const cut2World = intersects[1].point;
+
+        // Convert to local space
+        const cut1Local = cut1World.clone();
+        const cut2Local = cut2World.clone();
+
+        const cut1Idx = newVertexIndex++;
+        newPositions.push(cut1Local.x, cut1Local.y, cut1Local.z);
+
+        const cut2Idx = newVertexIndex++;
+        newPositions.push(cut2Local.x, cut2Local.y, cut2Local.z);
+
+        // Proper triangulation along the cut line
+        // The cut creates 2 new vertices on edges, splitting the triangle
+        // into a quadrilateral which we then split into 2 triangles
+
+        // Simple approach: Create 2 triangles separated by the cut line
+        // Triangle 1: Vertices on one side of cut
+        // Triangle 2: Vertices on other side of cut
+
+        // For a triangle split by a line through 2 edges:
+        // If cut goes from edge v0-v1 to edge v1-v2, vertex v0 and v2 are separated
+        // Create: (v0, cut1, cut2) and (v2, cut2, cut1) and (v1, cut1, cut2)
+
+        // Get edge info if available
+        const edge1 = intersects[0].edgeIndex !== undefined ? intersects[0].edgeIndex : -1;
+        const edge2 = intersects[1].edgeIndex !== undefined ? intersects[1].edgeIndex : -1;
+
+        if (edge1 >= 0 && edge2 >= 0 && edge1 !== edge2) {
+          // We know which edges were cut - use proper triangulation
+          const splitIndices = splitTriangleAlongCut(
+            v0Idx, v1Idx, v2Idx,
+            cut1Idx, cut2Idx,
+            { edge1, edge2 }
+          );
+          newIndices.push(...splitIndices);
+          console.log(`[KnifeCut] Split face ${faceIdx} along edges ${edge1} and ${edge2} (proper triangulation)`);
+        } else {
+          // Fallback: create simple fan triangulation
+          newIndices.push(v0Idx, cut1Idx, cut2Idx);
+          newIndices.push(v1Idx, cut1Idx, cut2Idx);
+          newIndices.push(v2Idx, cut1Idx, cut2Idx);
+          console.log(`[KnifeCut] Split face ${faceIdx} with simple triangulation`);
+        }
+      } else {
+        // More than 2 intersections or exactly 1 - copy original face
+        // TODO: Handle complex multi-intersection cases
+        const i = faceIdx * 3;
+        newIndices.push(
+          indices.getX(i),
+          indices.getX(i + 1),
+          indices.getX(i + 2)
+        );
+      }
+    }
+
+    // Update geometry
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(newPositions, 3));
+    geometry.setIndex(new THREE.Uint32BufferAttribute(newIndices, 1));
+
+    // Update other attributes
+    const oldNormals = geometry.attributes.normal;
+    const oldUvs = geometry.attributes.uv;
+
+    if (oldNormals) {
+      const newNormals: number[] = [];
+      for (let i = 0; i < vertexCount; i++) {
+        newNormals.push(
+          oldNormals.getX(i),
+          oldNormals.getY(i),
+          oldNormals.getZ(i)
+        );
+      }
+      // Add placeholder normals for new vertices (will be recalculated)
+      const newVertCount = newVertexIndex - vertexCount;
+      for (let i = 0; i < newVertCount; i++) {
+        newNormals.push(0, 1, 0);
+      }
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(newNormals, 3));
+    }
+
+    if (oldUvs) {
+      const newUvs: number[] = [];
+      for (let i = 0; i < vertexCount; i++) {
+        newUvs.push(
+          oldUvs.getX(i),
+          oldUvs.getY(i)
+        );
+      }
+      // Add placeholder UVs for new vertices
+      const newVertCount = newVertexIndex - vertexCount;
+      for (let i = 0; i < newVertCount; i++) {
+        newUvs.push(0.5, 0.5); // Center of UV space
+      }
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(newUvs, 2));
+    }
+
+    // Recalculate geometry properties
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+
+    geometry.attributes.position.needsUpdate = true;
+    if (geometry.attributes.normal) geometry.attributes.normal.needsUpdate = true;
+    if (geometry.attributes.uv) geometry.attributes.uv.needsUpdate = true;
+
+    console.log(`[KnifeCut] Knife cut complete, added ${newVertexIndex - vertexCount} vertices`);
   }
 }

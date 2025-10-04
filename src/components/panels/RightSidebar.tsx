@@ -111,7 +111,7 @@ export function RightSidebar() {
       </div>
 
       {/* Panel Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
         {activeTab === 'edit' && <EditModePanel />}
         {activeTab === 'properties' && <PropertiesPanel />}
         {activeTab === 'material' && <MaterialPanel />}

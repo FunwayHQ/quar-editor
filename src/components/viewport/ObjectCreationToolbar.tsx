@@ -68,21 +68,36 @@ export function ObjectCreationToolbar() {
   const primitives: ObjectType[] = ['box', 'sphere', 'cylinder', 'cone', 'torus', 'plane'];
   const lights: ObjectType[] = ['pointLight', 'spotLight', 'directionalLight', 'ambientLight'];
 
+  const primitiveShortcuts: Record<ObjectType, string> = {
+    box: 'Shift+1',
+    sphere: 'Shift+2',
+    cylinder: 'Shift+3',
+    cone: 'Shift+4',
+    torus: 'Shift+5',
+    plane: 'Shift+6',
+    pointLight: 'Shift+7',
+    spotLight: 'Shift+8',
+    directionalLight: 'Shift+9',
+    ambientLight: 'Shift+0',
+  };
+
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
       <div className="flex items-center gap-2 bg-[#18181B]/80 backdrop-blur-md border border-[#27272A] rounded-lg px-3 py-2 shadow-lg">
-        {primitives.map((type) => {
+        {primitives.map((type, idx) => {
           const Icon = primitiveIcons[type];
+          const shortcut = primitiveShortcuts[type];
           return (
             <button
               key={type}
               onClick={() => handleCreateObject(type)}
               className="p-2 rounded hover:bg-[#27272A] transition-colors group relative"
-              title={`Create ${primitiveLabels[type]}`}
+              title={shortcut ? `Create ${primitiveLabels[type]} (${shortcut})` : `Create ${primitiveLabels[type]}`}
             >
               <Icon className="w-5 h-5 text-[#FAFAFA]" />
               <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-[#18181B] border border-[#27272A] rounded text-xs text-[#FAFAFA] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                 {primitiveLabels[type]}
+                {shortcut && <span className="ml-2 text-[#7C3AED]">{shortcut}</span>}
               </span>
             </button>
           );
@@ -92,16 +107,18 @@ export function ObjectCreationToolbar() {
 
         {lights.map((type) => {
           const Icon = primitiveIcons[type];
+          const shortcut = primitiveShortcuts[type];
           return (
             <button
               key={type}
               onClick={() => handleCreateObject(type)}
               className="p-2 rounded hover:bg-[#27272A] transition-colors group relative"
-              title={`Create ${primitiveLabels[type]}`}
+              title={shortcut ? `Create ${primitiveLabels[type]} (${shortcut})` : `Create ${primitiveLabels[type]}`}
             >
               <Icon className="w-5 h-5 text-[#F59E0B]" />
               <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-[#18181B] border border-[#27272A] rounded text-xs text-[#FAFAFA] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                 {primitiveLabels[type]}
+                {shortcut && <span className="ml-2 text-[#F59E0B]">{shortcut}</span>}
               </span>
             </button>
           );

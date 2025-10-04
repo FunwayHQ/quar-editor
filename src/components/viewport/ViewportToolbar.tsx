@@ -25,10 +25,10 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
 
   const { transformMode, setTransformMode, selectedIds } = useObjectsStore();
 
-  const shadingModes: Array<{ mode: 'wireframe' | 'solid' | 'material'; label: string; icon: any }> = [
-    { mode: 'wireframe', label: 'Wireframe', icon: Grid3x3 },
-    { mode: 'solid', label: 'Solid', icon: Box },
-    { mode: 'material', label: 'Material', icon: Eye },
+  const shadingModes: Array<{ mode: 'wireframe' | 'solid' | 'material'; label: string; icon: any; shortcut: string }> = [
+    { mode: 'wireframe', label: 'Wireframe', icon: Grid3x3, shortcut: 'Z' },
+    { mode: 'solid', label: 'Solid', icon: Box, shortcut: 'X' },
+    { mode: 'material', label: 'Material', icon: Eye, shortcut: 'C' },
   ];
 
   const transformModes: Array<{ mode: 'translate' | 'rotate' | 'scale'; label: string; icon: any; shortcut: string }> = [
@@ -70,7 +70,7 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
 
       {/* Shading Modes */}
       <div className="flex items-center gap-1">
-        {shadingModes.map(({ mode, label, icon: Icon }) => (
+        {shadingModes.map(({ mode, label, icon: Icon, shortcut }) => (
           <button
             key={mode}
             onClick={() => setShadingMode(mode)}
@@ -79,7 +79,7 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
                 ? 'bg-accent text-white'
                 : 'text-text-secondary hover:text-text-primary hover:bg-panel'
             }`}
-            title={label}
+            title={`${label} (${shortcut})`}
           >
             <Icon className="w-4 h-4" />
           </button>
@@ -101,7 +101,7 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
             ? 'bg-accent text-white'
             : 'text-text-secondary hover:text-text-primary hover:bg-panel'
         }`}
-        title="Toggle Grid"
+        title="Toggle Grid (G)"
       >
         <Grid3x3 className="w-4 h-4" />
       </button>

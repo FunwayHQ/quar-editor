@@ -5,7 +5,7 @@
  * Sprint 7: Export System + Polygon Editing MVP
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useEditModeStore, makeEdgeKey } from '../../stores/editModeStore';
 
@@ -26,6 +26,42 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     toggleFaceSelection,
   } = useEditModeStore();
 
+  // Track created geometries and materials for disposal
+  const geometriesRef = useRef<THREE.BufferGeometry[]>([]);
+  const materialsRef = useRef<THREE.Material[]>([]);
+  const cylinderCacheRef = useRef<Map<string, THREE.CylinderGeometry>>(new Map());
+
+  // Cleanup geometries and materials on unmount or selection change
+  useEffect(() => {
+    return () => {
+      // Dispose all tracked geometries
+      geometriesRef.current.forEach(geo => geo.dispose());
+      geometriesRef.current = [];
+
+      // Dispose all tracked materials
+      materialsRef.current.forEach(mat => mat.dispose());
+      materialsRef.current = [];
+
+      // Dispose cylinder cache
+      cylinderCacheRef.current.forEach(geo => geo.dispose());
+      cylinderCacheRef.current.clear();
+    };
+  }, [selectedFaces, selectedVertices, selectedEdges, selectionMode]);
+
+  // Helper to get/create cached cylinder geometry
+  const getCylinderGeometry = (radiusTop: number, radiusBottom: number, length: number, segments: number) => {
+    // Round length to nearest 0.1 to reuse similar cylinders
+    const roundedLength = Math.round(length * 10) / 10;
+    const key = `${radiusTop}-${radiusBottom}-${roundedLength}-${segments}`;
+
+    if (!cylinderCacheRef.current.has(key)) {
+      const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, roundedLength, segments);
+      cylinderCacheRef.current.set(key, geo);
+    }
+
+    return cylinderCacheRef.current.get(key)!;
+  };
+
   // Only show helpers for the object being edited
   if (editingObjectId !== objectId) return null;
 
@@ -35,6 +71,35 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
   // Get vertex positions
   const positions = geometry.getAttribute('position');
   if (!positions) return null;
+
+  // Create shared geometries for vertex helpers (reused, not recreated)
+  const sharedVertexGeometries = useMemo(() => {
+    const outerGlow = new THREE.SphereGeometry(0.06, 8, 8);
+    const coreSphere = new THREE.SphereGeometry(0.04, 12, 12);
+    const unselectedSphere = new THREE.SphereGeometry(0.02, 6, 6);
+    const edgeEndpoint = new THREE.SphereGeometry(0.03, 8, 8);
+    const edgeEndpointSmall = new THREE.SphereGeometry(0.015, 6, 6);
+
+    geometriesRef.current.push(outerGlow, coreSphere, unselectedSphere, edgeEndpoint, edgeEndpointSmall);
+
+    return { outerGlow, coreSphere, unselectedSphere, edgeEndpoint, edgeEndpointSmall };
+  }, []);
+
+  // Create shared materials (reused, not recreated)
+  const sharedMaterials = useMemo(() => {
+    const goldGlow = new THREE.MeshBasicMaterial({ color: "#FFD700", transparent: true, opacity: 0.3 });
+    const yellow = new THREE.MeshBasicMaterial({ color: "#FFFF00" });
+    const purpleDark = new THREE.MeshBasicMaterial({ color: "#6B46C1", transparent: true, opacity: 0.6 });
+    const goldSolid = new THREE.MeshBasicMaterial({ color: "#FFD700" });
+    const purpleGlow = new THREE.MeshBasicMaterial({ color: "#7C3AED", transparent: true, opacity: 0.4 });
+    const purpleDarkEdge = new THREE.MeshBasicMaterial({ color: "#6B46C1", transparent: true, opacity: 0.5 });
+    const yellowEdge = new THREE.MeshBasicMaterial({ color: "#FFFF00", transparent: true, opacity: 0.9 });
+    const invisible = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthTest: false });
+
+    materialsRef.current.push(goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible);
+
+    return { goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible };
+  }, []);
 
   // Create vertex helpers
   const vertexHelpers = useMemo(() => {
@@ -64,24 +129,16 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
             <mesh
               position={[x, y, z]}
               onClick={(e) => handleVertexClick(e, i)}
-            >
-              <sphereGeometry args={[0.06, 8, 8]} />
-              <meshBasicMaterial
-                color="#FFD700"
-                transparent
-                opacity={0.3}
-              />
-            </mesh>
+              geometry={sharedVertexGeometries.outerGlow}
+              material={sharedMaterials.goldGlow}
+            />
             {/* Core sphere */}
             <mesh
               position={[x, y, z]}
               onClick={(e) => handleVertexClick(e, i)}
-            >
-              <sphereGeometry args={[0.04, 12, 12]} />
-              <meshBasicMaterial
-                color="#FFFF00"
-              />
-            </mesh>
+              geometry={sharedVertexGeometries.coreSphere}
+              material={sharedMaterials.yellow}
+            />
           </group>
         );
       } else {
@@ -91,20 +148,15 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
             key={`vertex-${i}`}
             position={[x, y, z]}
             onClick={(e) => handleVertexClick(e, i)}
-          >
-            <sphereGeometry args={[0.02, 6, 6]} />
-            <meshBasicMaterial
-              color="#6B46C1"  // Darker purple
-              transparent
-              opacity={0.6}
-            />
-          </mesh>
+            geometry={sharedVertexGeometries.unselectedSphere}
+            material={sharedMaterials.purpleDark}
+          />
         );
       }
     }
 
     return <>{vertices}</>;
-  }, [selectionMode, positions, selectedVertices, toggleVertexSelection]);
+  }, [selectionMode, positions, selectedVertices, toggleVertexSelection, sharedVertexGeometries]);
 
   // Create edge helpers
   const edgeHelpers = useMemo(() => {
@@ -189,6 +241,9 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
 
       if (isSelected) {
         // Create a thick cylinder for selected edges
+        const outerCyl = getCylinderGeometry(0.025, 0.025, edgeLength, 8);
+        const coreCyl = getCylinderGeometry(0.015, 0.015, edgeLength, 8);
+
         edges.push(
           <group key={`edge-${key}-group`}>
             {/* Outer glow cylinder */}
@@ -196,42 +251,29 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
               position={midpoint}
               quaternion={quaternion}
               onClick={(e) => handleEdgeClick(e, v1, v2)}
-            >
-              <cylinderGeometry args={[0.025, 0.025, edgeLength, 8]} />
-              <meshBasicMaterial
-                color="#FFD700"
-                transparent
-                opacity={0.3}
-              />
-            </mesh>
+              geometry={outerCyl}
+              material={sharedMaterials.goldGlow}
+            />
 
             {/* Core cylinder */}
             <mesh
               position={midpoint}
               quaternion={quaternion}
               onClick={(e) => handleEdgeClick(e, v1, v2)}
-            >
-              <cylinderGeometry args={[0.015, 0.015, edgeLength, 8]} />
-              <meshBasicMaterial
-                color="#FFFF00"
-                transparent
-                opacity={0.9}
-              />
-            </mesh>
+              geometry={coreCyl}
+              material={sharedMaterials.yellowEdge}
+            />
 
             {/* Endpoint spheres for emphasis */}
-            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1, v2)}>
-              <sphereGeometry args={[0.03, 8, 8]} />
-              <meshBasicMaterial color="#FFD700" />
-            </mesh>
-            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1, v2)}>
-              <sphereGeometry args={[0.03, 8, 8]} />
-              <meshBasicMaterial color="#FFD700" />
-            </mesh>
+            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpoint} material={sharedMaterials.goldSolid} />
+            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpoint} material={sharedMaterials.goldSolid} />
           </group>
         );
       } else {
         // Clickable overlay for unselected edges - larger and more visible
+        const clickCyl = getCylinderGeometry(0.02, 0.02, edgeLength, 8);
+        const visibleCyl = getCylinderGeometry(0.008, 0.008, edgeLength, 6);
+
         edges.push(
           <group key={`edge-${key}`}>
             {/* Invisible thick cylinder for easier clicking */}
@@ -239,53 +281,29 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
               position={midpoint}
               onClick={(e) => handleEdgeClick(e, v1, v2)}
               quaternion={quaternion}
-            >
-              <cylinderGeometry args={[0.02, 0.02, edgeLength, 8]} />
-              <meshBasicMaterial
-                transparent
-                opacity={0}
-                depthTest={false}
-              />
-            </mesh>
+              geometry={clickCyl}
+              material={sharedMaterials.invisible}
+            />
 
             {/* Visible thin purple line */}
             <mesh
               position={midpoint}
               quaternion={quaternion}
               onClick={(e) => handleEdgeClick(e, v1, v2)}
-            >
-              <cylinderGeometry args={[0.008, 0.008, edgeLength, 6]} />
-              <meshBasicMaterial
-                color="#7C3AED"
-                transparent
-                opacity={0.4}
-              />
-            </mesh>
+              geometry={visibleCyl}
+              material={sharedMaterials.purpleGlow}
+            />
 
             {/* Endpoint spheres for better visibility */}
-            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1, v2)}>
-              <sphereGeometry args={[0.015, 6, 6]} />
-              <meshBasicMaterial
-                color="#6B46C1"
-                transparent
-                opacity={0.5}
-              />
-            </mesh>
-            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1, v2)}>
-              <sphereGeometry args={[0.015, 6, 6]} />
-              <meshBasicMaterial
-                color="#6B46C1"
-                transparent
-                opacity={0.5}
-              />
-            </mesh>
+            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpointSmall} material={sharedMaterials.purpleDarkEdge} />
+            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpointSmall} material={sharedMaterials.purpleDarkEdge} />
           </group>
         );
       }
     });
 
     return <>{edges}</>;
-  }, [selectionMode, geometry, positions, selectedEdges, toggleEdgeSelection]);
+  }, [selectionMode, geometry, positions, selectedEdges, toggleEdgeSelection, sharedVertexGeometries, sharedMaterials, getCylinderGeometry]);
 
   // Create face helpers
   const faceHelpers = useMemo(() => {
@@ -333,6 +351,8 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
           ];
 
           const faceGeometry = new THREE.BufferGeometry();
+          geometriesRef.current.push(faceGeometry); // Track for disposal
+
           const vertices = new Float32Array([
             ...faceVertices[0].toArray(),
             ...faceVertices[1].toArray(),
@@ -399,6 +419,8 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
           ];
 
           const faceGeometry = new THREE.BufferGeometry();
+          geometriesRef.current.push(faceGeometry); // Track for disposal
+
           const vertices = new Float32Array([
             ...faceVertices[0].toArray(),
             ...faceVertices[1].toArray(),
@@ -436,25 +458,35 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
       }
     }
 
-    // Add wireframe overlay for better face visibility
-    return (
-      <>
-        {faces}
-        {selectionMode === 'face' && (
-          <lineSegments>
-            <edgesGeometry attach="geometry" args={[geometry]} />
-            <lineBasicMaterial
-              color="#7C3AED"
-              opacity={0.3}
-              transparent
-              depthTest={false}
-              depthWrite={false}
-            />
-          </lineSegments>
-        )}
-      </>
-    );
+    return <>{faces}</>;
   }, [selectionMode, geometry, positions, selectedFaces, toggleFaceSelection]);
+
+  // Create edges geometry for face mode wireframe (memoized to prevent recreation)
+  const edgesGeometry = useMemo(() => {
+    if (selectionMode !== 'face') return null;
+
+    const edges = new THREE.EdgesGeometry(geometry);
+    geometriesRef.current.push(edges); // Track for disposal
+    return edges;
+  }, [selectionMode, geometry]);
+
+  // Add wireframe overlay for better face visibility in face mode
+  const wireframeOverlay = useMemo(() => {
+    if (selectionMode !== 'face' || !edgesGeometry) return null;
+
+    return (
+      <lineSegments>
+        <primitive object={edgesGeometry} attach="geometry" />
+        <lineBasicMaterial
+          color="#7C3AED"
+          opacity={0.3}
+          transparent
+          depthTest={false}
+          depthWrite={false}
+        />
+      </lineSegments>
+    );
+  }, [selectionMode, edgesGeometry]);
 
   return (
     <group
@@ -465,6 +497,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
       {vertexHelpers}
       {edgeHelpers}
       {faceHelpers}
+      {wireframeOverlay}
     </group>
   );
 }

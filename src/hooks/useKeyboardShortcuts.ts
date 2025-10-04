@@ -9,6 +9,8 @@ import { useObjectsStore } from '../stores/objectsStore';
 import { useCommandStore } from '../stores/commandStore';
 import { useAnimationStore } from '../stores/animationStore';
 import { useEditModeStore } from '../stores/editModeStore';
+import { useKnifeToolStore } from '../stores/knifeToolStore';
+import { useSceneStore } from '../stores/sceneStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand } from '../lib/commands/ObjectCommands';
 import { getAnimationEngine } from '../lib/animation/AnimationEngine';
 
@@ -106,7 +108,12 @@ export function useKeyboardShortcuts() {
 
       // Deselect All (Escape)
       else if (e.key === 'Escape') {
-        if (isEditMode) {
+        const { isActive: isKnifeActive, cancelCut } = useKnifeToolStore.getState();
+
+        if (isKnifeActive) {
+          // Cancel knife tool path
+          cancelCut();
+        } else if (isEditMode) {
           // Clear edit mode selections
           clearEditSelection();
         } else {
@@ -126,12 +133,95 @@ export function useKeyboardShortcuts() {
         }
       }
 
+      // Knife Tool: K key (toggle knife tool in edit mode)
+      else if (isEditMode && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        const { isActive: isKnifeActive, activateTool, deactivateTool } = useKnifeToolStore.getState();
+
+        if (isKnifeActive) {
+          deactivateTool();
+        } else {
+          activateTool();
+        }
+      }
+
       // Edit Mode: Selection mode shortcuts (1/2/3)
       else if (isEditMode && ['1', '2', '3'].includes(e.key)) {
         e.preventDefault();
         if (e.key === '1') setSelectionMode('vertex');
         else if (e.key === '2') setSelectionMode('edge');
         else if (e.key === '3') setSelectionMode('face');
+      }
+
+      // Shading Modes (when not in edit mode): Z/X/C
+      else if (!isEditMode && e.key === 'z') {
+        e.preventDefault();
+        useSceneStore.getState().setShadingMode('wireframe');
+      }
+      else if (!isEditMode && e.key === 'x') {
+        e.preventDefault();
+        useSceneStore.getState().setShadingMode('solid');
+      }
+      else if (!isEditMode && e.key === 'c') {
+        e.preventDefault();
+        useSceneStore.getState().setShadingMode('material');
+      }
+
+      // Toggle Grid: G
+      else if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault();
+        useSceneStore.getState().setShowGrid(!useSceneStore.getState().showGrid);
+      }
+
+      // Object Creation: Shift + Number (use e.code for reliability)
+      else if (e.shiftKey && !isEditMode) {
+        const objectsStore = useObjectsStore.getState();
+
+        if (e.code === 'Digit1') {
+          e.preventDefault();
+          const box = objectsStore.createPrimitive('box');
+          objectsStore.addObject(box);
+        } else if (e.code === 'Digit2') {
+          e.preventDefault();
+          const sphere = objectsStore.createPrimitive('sphere');
+          objectsStore.addObject(sphere);
+        } else if (e.code === 'Digit3') {
+          e.preventDefault();
+          const cylinder = objectsStore.createPrimitive('cylinder');
+          objectsStore.addObject(cylinder);
+        } else if (e.code === 'Digit4') {
+          e.preventDefault();
+          const cone = objectsStore.createPrimitive('cone');
+          objectsStore.addObject(cone);
+        } else if (e.code === 'Digit5') {
+          e.preventDefault();
+          const torus = objectsStore.createPrimitive('torus');
+          objectsStore.addObject(torus);
+        } else if (e.code === 'Digit6') {
+          e.preventDefault();
+          const plane = objectsStore.createPrimitive('plane');
+          objectsStore.addObject(plane);
+        } else if (e.code === 'Digit7') {
+          e.preventDefault();
+          const light = objectsStore.createPrimitive('pointLight');
+          objectsStore.addObject(light);
+          console.log('[Shortcuts] Created point light');
+        } else if (e.code === 'Digit8') {
+          e.preventDefault();
+          const light = objectsStore.createPrimitive('spotLight');
+          objectsStore.addObject(light);
+          console.log('[Shortcuts] Created spot light');
+        } else if (e.code === 'Digit9') {
+          e.preventDefault();
+          const light = objectsStore.createPrimitive('directionalLight');
+          objectsStore.addObject(light);
+          console.log('[Shortcuts] Created directional light');
+        } else if (e.code === 'Digit0') {
+          e.preventDefault();
+          const light = objectsStore.createPrimitive('ambientLight');
+          objectsStore.addObject(light);
+          console.log('[Shortcuts] Created ambient light');
+        }
       }
 
       // Animation: Play/Pause (Space)

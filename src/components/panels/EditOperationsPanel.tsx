@@ -347,7 +347,7 @@ export function EditOperationsPanel() {
   }
 
   return (
-    <div className="absolute top-20 right-4 w-64 bg-[#18181B]/95 backdrop-blur-md border border-[#27272A] rounded-lg shadow-xl">
+    <div className="absolute top-4 right-4 w-64 bg-[#18181B]/95 backdrop-blur-md border border-[#27272A] rounded-lg shadow-xl z-50">
       {/* Header */}
       <div className="p-3 border-b border-[#27272A]">
         <div className="flex items-center justify-between">

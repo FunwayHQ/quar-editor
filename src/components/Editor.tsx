@@ -23,10 +23,12 @@ import { RightSidebar } from './panels/RightSidebar';
 import { Timeline } from './timeline/Timeline';
 import { ExportDialog } from './export/ExportDialog';
 import { EditOperationsPanel } from './panels/EditOperationsPanel';
+import { KnifeToolPanel } from './panels/KnifeToolPanel';
 import { ViewportToolbar } from './viewport/ViewportToolbar';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useAnimationKeyframes } from '../hooks/useAnimationKeyframes';
 import { useEditModeStore } from '../stores/editModeStore';
+import { useKnifeToolStore } from '../stores/knifeToolStore';
 import { meshRegistry } from '../lib/mesh/MeshRegistry';
 
 export function Editor() {
@@ -38,6 +40,7 @@ export function Editor() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const { isEditMode } = useEditModeStore();
+  const { isActive: isKnifeActive } = useKnifeToolStore();
 
   const storage = getStorageAdapter();
 
@@ -444,7 +447,8 @@ export function Editor() {
           {/* Center - Viewport */}
           <div className="flex-1 relative">
             <Viewport />
-            {isEditMode && <EditOperationsPanel />}
+            {isEditMode && !isKnifeActive && <EditOperationsPanel />}
+            {isEditMode && isKnifeActive && <KnifeToolPanel />}
           </div>
 
           {/* Right Sidebar - Properties & Material */}

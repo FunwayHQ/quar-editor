@@ -35,6 +35,15 @@ function ToastItem({ toast }: { toast: ToastType }) {
 
   const Icon = icons[toast.type];
 
+  // Auto-dismiss after duration
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleClose();
+    }, toast.duration || 3000);
+
+    return () => clearTimeout(timer);
+  }, [toast.id]);
+
   const handleClose = () => {
     setIsLeaving(true);
     setTimeout(() => {

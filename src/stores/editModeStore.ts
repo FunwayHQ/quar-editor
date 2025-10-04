@@ -76,13 +76,22 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
     selectedFaces: new Set(),
   }),
 
-  exitEditMode: () => set({
-    isEditMode: false,
-    editingObjectId: null,
-    selectedVertices: new Set(),
-    selectedEdges: new Set(),
-    selectedFaces: new Set(),
-  }),
+  exitEditMode: () => {
+    // Import knife tool store dynamically to avoid circular dependency
+    import('./knifeToolStore').then(({ useKnifeToolStore }) => {
+      if (useKnifeToolStore.getState().isActive) {
+        useKnifeToolStore.getState().deactivateTool();
+      }
+    });
+
+    set({
+      isEditMode: false,
+      editingObjectId: null,
+      selectedVertices: new Set(),
+      selectedEdges: new Set(),
+      selectedFaces: new Set(),
+    });
+  },
 
   setSelectionMode: (mode) => set({
     selectionMode: mode,

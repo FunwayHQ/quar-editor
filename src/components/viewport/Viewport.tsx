@@ -15,12 +15,13 @@ import { useObjectsStore } from '@/stores/objectsStore';
 import { useEnvironmentStore } from '@/stores/environmentStore';
 import { useEditModeStore } from '@/stores/editModeStore';
 import { ViewportToolbar } from './ViewportToolbar';
-import { StatsPanel } from './StatsPanel';
+import { StatsPanel, FPSCounter } from './StatsPanel';
 import { ObjectCreationToolbar } from './ObjectCreationToolbar';
 import { SceneObject } from './SceneObject';
 import { TransformGizmo } from './TransformGizmo';
 import { EditTransformControls } from './EditTransformControls';
 import { EditModeToolbar } from './EditModeToolbar';
+import { KnifeToolVisuals } from './KnifeToolVisuals';
 import { useCameraPresets } from './CameraPresets';
 import * as THREE from 'three';
 import { useEffect } from 'react';
@@ -139,6 +140,12 @@ function Scene() {
       ) : (
         <TransformGizmo />
       )}
+
+      {/* Knife Tool Visuals */}
+      <KnifeToolVisuals />
+
+      {/* FPS Counter - tracks scene stats */}
+      <FPSCounter />
 
     </>
   );

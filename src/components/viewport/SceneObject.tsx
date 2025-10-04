@@ -12,8 +12,15 @@ import { useMaterialsStore } from '../../stores/materialsStore';
 import { useSceneStore } from '../../stores/sceneStore';
 import { useEditModePicking } from '../../hooks/useEditModePicking';
 import { EditModeHelpers } from './EditModeHelpers';
+import { KnifeFaceHighlight } from './KnifeFaceHighlight';
 import { useEditModeStore } from '../../stores/editModeStore';
+import { useKnifeToolStore } from '../../stores/knifeToolStore';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
+import {
+  findLineIntersections,
+  findNearbyEdge,
+  closestPointOnLine,
+} from '../../lib/geometry/IntersectionUtils';
 
 interface SceneObjectProps {
   object: SceneObjectType;
@@ -32,6 +39,16 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   const { handleEditModeClick, isEditMode } = useEditModePicking();
   const { editingObjectId } = useEditModeStore();
 
+  // Knife tool state
+  const {
+    isActive: isKnifeActive,
+    drawingPath,
+    intersectionPoints,
+    targetFaceIndex,
+    addPathPoint,
+    setIntersectionPoints,
+  } = useKnifeToolStore();
+
   // Get material assigned to this object - subscribe to materials Map for reactivity
   const objectMaterials = useMaterialsStore((state) => state.objectMaterials);
   const materials = useMaterialsStore((state) => state.materials);
@@ -42,6 +59,21 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
   // Check if this is a light object
   const isLight = ['pointLight', 'spotLight', 'directionalLight', 'ambientLight'].includes(object.type);
+
+  // Shared light helper geometries (created once, reused for all lights)
+  const lightHelperGeometries = useMemo(() => ({
+    pointLightSphere: new THREE.SphereGeometry(0.2, 16, 16),
+    spotLightCone: new THREE.ConeGeometry(0.3, 0.5, 8, 1, true),
+    directionalLightPlane: new THREE.PlaneGeometry(0.5, 0.5),
+    ambientLightIco: new THREE.IcosahedronGeometry(0.2, 1),
+  }), []);
+
+  // Cleanup light helper geometries on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(lightHelperGeometries).forEach(geo => geo.dispose());
+    };
+  }, [lightHelperGeometries]);
 
   // Create geometry based on object type
   const geometry = useMemo(() => {
@@ -304,15 +336,116 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
   }, [object.id, isLight]);
 
+  // Cleanup: Dispose geometry and material on unmount or when they change
+  useEffect(() => {
+    // Store references to current geometry and material
+    const currentGeometry = geometry;
+    const currentMaterial = material;
+
+    return () => {
+      // Dispose geometry
+      if (currentGeometry) {
+        currentGeometry.dispose();
+      }
+
+      // Dispose material (including textures)
+      if (currentMaterial) {
+        if (currentMaterial instanceof THREE.Material) {
+          // Dispose textures in material
+          Object.keys(currentMaterial).forEach((key) => {
+            const value = (currentMaterial as any)[key];
+            if (value && value instanceof THREE.Texture) {
+              value.dispose();
+            }
+          });
+          // Dispose material itself
+          currentMaterial.dispose();
+        }
+      }
+    };
+  }, [geometry, material]);
+
   // Handle click
   const handleClick = (event: THREE.Event) => {
     event.stopPropagation();
 
-    // If in edit mode, handle edit mode picking instead of object selection
+    // Priority 1: Knife tool (if active in edit mode)
+    if (isKnifeActive && isEditMode && editingObjectId === object.id && meshRef.current) {
+      const intersection = (event as any).intersections?.[0];
+      if (intersection) {
+        // Try to find nearby edge to snap to
+        const nearbyEdge = findNearbyEdge(
+          intersection.point,
+          meshRef.current.geometry,
+          meshRef.current,
+          0.15 // Snap threshold
+        );
+
+        let snapPoint: THREE.Vector3;
+
+        if (nearbyEdge) {
+          // Snap to edge - find closest point on that edge
+          const positions = meshRef.current.geometry.attributes.position;
+          const [v0Idx, v1Idx] = nearbyEdge;
+
+          const p0 = new THREE.Vector3().fromBufferAttribute(positions, v0Idx);
+          const p1 = new THREE.Vector3().fromBufferAttribute(positions, v1Idx);
+
+          // Transform to world space
+          meshRef.current.localToWorld(p0);
+          meshRef.current.localToWorld(p1);
+
+          // Find closest point on the edge
+          snapPoint = closestPointOnLine(p0, p1, intersection.point);
+
+          console.log('[KnifeTool] Snapped to edge:', nearbyEdge);
+        } else {
+          // Use the clicked point
+          snapPoint = intersection.point.clone();
+        }
+
+        // If we already have a target face, validate this click is on the same face
+        if (targetFaceIndex !== null && intersection.faceIndex !== targetFaceIndex) {
+          console.warn('[KnifeTool] Second point must be on the same face! Click on face', targetFaceIndex);
+          return; // Ignore clicks on different faces
+        }
+
+        // Add point to cutting path (pass face index for first point)
+        addPathPoint(snapPoint, intersection.faceIndex);
+
+        // If we have 2 points, find intersections
+        if (drawingPath.length === 1) {
+          // We just added the second point, calculate intersections
+          const currentPath = [...drawingPath, snapPoint];
+
+          if (currentPath.length === 2) {
+            const intersections = findLineIntersections(
+              currentPath[0],
+              currentPath[1],
+              meshRef.current.geometry,
+              meshRef.current
+            );
+
+            // Filter to only intersections on the same face as the first point
+            // For now, log all intersections and let algorithm handle it
+            console.log('[KnifeTool] Total intersections:', intersections.length);
+            intersections.forEach(int => {
+              console.log('  - Face', int.faceIndex, 'at', int.point.toArray());
+            });
+
+            setIntersectionPoints(intersections);
+          }
+        }
+      }
+      return;
+    }
+
+    // Priority 2: Edit mode picking
     if (isEditMode && meshRef.current) {
       handleEditModeClick(event, meshRef.current);
-    } else {
-      // Normal object selection
+    }
+    // Priority 3: Normal object selection
+    else {
       onSelect(object.id, event.nativeEvent.shiftKey || event.nativeEvent.ctrlKey || event.nativeEvent.metaKey);
     }
   };
@@ -348,8 +481,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               shadow-radius={lightProps.shadowRadius || 1}
             />
             {/* Helper sphere to visualize light position */}
-            <mesh onClick={handleClick}>
-              <sphereGeometry args={[0.2, 16, 16]} />
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.pointLightSphere}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} />
             </mesh>
           </group>
@@ -373,8 +505,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               shadow-radius={lightProps.shadowRadius || 1}
             />
             {/* Helper cone to visualize spot light */}
-            <mesh onClick={handleClick}>
-              <coneGeometry args={[0.3, 0.5, 8, 1, true]} />
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.spotLightCone}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} wireframe />
             </mesh>
           </group>
@@ -400,8 +531,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               shadow-camera-far={50}
             />
             {/* Helper to visualize directional light */}
-            <mesh onClick={handleClick}>
-              <planeGeometry args={[0.5, 0.5]} />
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.directionalLightPlane}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} side={THREE.DoubleSide} />
             </mesh>
           </group>
@@ -416,8 +546,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               intensity={lightProps.intensity}
             />
             {/* Helper sphere to visualize ambient light */}
-            <mesh onClick={handleClick}>
-              <icosahedronGeometry args={[0.2, 1]} />
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.ambientLightIco}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} wireframe />
             </mesh>
           </group>
@@ -441,8 +570,43 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
         castShadow
         receiveShadow
       />
+
+      {/* Knife tool: Show edges as wireframe overlay */}
+      {isKnifeActive && isEditMode && editingObjectId === object.id && meshRef.current && (
+        <>
+          {/* Show all edges if no points selected yet */}
+          {drawingPath.length === 0 && (
+            <mesh
+              geometry={geometry}
+              position={object.position}
+              rotation={object.rotation}
+              scale={object.scale}
+            >
+              <meshBasicMaterial
+                color="#10B981"
+                wireframe
+                transparent
+                opacity={0.3}
+                depthTest={false}
+              />
+            </mesh>
+          )}
+
+          {/* Show only the selected face's edges after first point */}
+          {drawingPath.length === 1 && targetFaceIndex !== null && (
+            <KnifeFaceHighlight
+              geometry={geometry}
+              faceIndex={targetFaceIndex}
+              position={object.position}
+              rotation={object.rotation}
+              scale={object.scale}
+            />
+          )}
+        </>
+      )}
+
       {/* Edit mode helpers for vertex/edge/face selection */}
-      {isEditMode && editingObjectId === object.id && meshRef.current && (
+      {isEditMode && editingObjectId === object.id && !isKnifeActive && meshRef.current && (
         <EditModeHelpers mesh={meshRef.current} objectId={object.id} />
       )}
     </>

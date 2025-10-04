@@ -6,14 +6,24 @@
  */
 
 import React from 'react';
-import { Circle, Minus, Square, LogOut } from 'lucide-react';
+import { Circle, Minus, Square, LogOut, Scissors } from 'lucide-react';
 import { useEditModeStore } from '../../stores/editModeStore';
+import { useKnifeToolStore } from '../../stores/knifeToolStore';
 import { SelectionMode } from '../../types/polygon';
 
 export function EditModeToolbar() {
   const { isEditMode, selectionMode, setSelectionMode, exitEditMode } = useEditModeStore();
+  const { isActive: isKnifeActive, activateTool, deactivateTool } = useKnifeToolStore();
 
   if (!isEditMode) return null;
+
+  const toggleKnifeTool = () => {
+    if (isKnifeActive) {
+      deactivateTool();
+    } else {
+      activateTool();
+    }
+  };
 
   const modes: { mode: SelectionMode; label: string; icon: typeof Circle; shortcut: string }[] = [
     { mode: 'vertex', label: 'Vertex', icon: Circle, shortcut: '1' },
@@ -42,12 +52,13 @@ export function EditModeToolbar() {
             <button
               key={mode}
               onClick={() => setSelectionMode(mode)}
+              disabled={isKnifeActive}
               className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-all ${
-                selectionMode === mode
+                selectionMode === mode && !isKnifeActive
                   ? 'bg-[#7C3AED] text-white shadow-lg'
                   : 'bg-[#0A0A0B] text-[#A1A1AA] hover:bg-[#27272A]'
-              }`}
-              title={`${label} Mode (${shortcut})`}
+              } ${isKnifeActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={isKnifeActive ? 'Disabled while knife tool is active' : `${label} Mode (${shortcut})`}
             >
               <Icon className="w-4 h-4" />
               <span>{label}</span>
@@ -55,6 +66,23 @@ export function EditModeToolbar() {
             </button>
           ))}
         </div>
+
+        <div className="w-px h-6 bg-[#27272A]" />
+
+        {/* Knife Tool Button */}
+        <button
+          onClick={toggleKnifeTool}
+          className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition-all ${
+            isKnifeActive
+              ? 'bg-[#10B981] text-white shadow-lg'
+              : 'bg-[#0A0A0B] text-[#A1A1AA] hover:bg-[#27272A]'
+          }`}
+          title="Knife Tool (K)"
+        >
+          <Scissors className="w-4 h-4" />
+          <span>Knife</span>
+          <span className="text-xs opacity-60">K</span>
+        </button>
       </div>
     </div>
   );

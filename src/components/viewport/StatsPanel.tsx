@@ -7,6 +7,7 @@
 import { useRef } from 'react';
 import { useSceneStore } from '@/stores/sceneStore';
 import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 
 export function StatsPanel() {
   const { stats } = useSceneStore();
@@ -58,15 +59,54 @@ export function FPSCounter() {
   const frameCount = useRef(0);
   const lastTime = useRef(performance.now());
 
-  useFrame(() => {
+  useFrame(({ scene, gl }) => {
     frameCount.current++;
     const currentTime = performance.now();
     const delta = currentTime - lastTime.current;
 
-    // Update FPS every second
+    // Update stats every second
     if (delta >= 1000) {
       const fps = (frameCount.current / delta) * 1000;
-      updateStats({ fps });
+
+      // Count vertices and triangles from scene
+      let totalVertices = 0;
+      let totalTriangles = 0;
+
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh && object.geometry) {
+          const geometry = object.geometry;
+          if (geometry.attributes.position) {
+            totalVertices += geometry.attributes.position.count;
+          }
+          if (geometry.index) {
+            totalTriangles += geometry.index.count / 3;
+          } else if (geometry.attributes.position) {
+            totalTriangles += geometry.attributes.position.count / 3;
+          }
+        }
+      });
+
+      // Get actual memory usage from WebGL
+      const info = (gl as any).info;
+      const geometryCount = info?.memory?.geometries || 0;
+      const textureCount = info?.memory?.textures || 0;
+
+      // Estimate memory: geometries + textures
+      // Each geometry: estimate based on vertices
+      const estimatedMemory = totalVertices * 48 + totalTriangles * 12;
+
+      updateStats({
+        fps,
+        vertices: totalVertices,
+        triangles: Math.floor(totalTriangles),
+        memory: estimatedMemory,
+      });
+
+      // Log if geometry count is growing (potential leak detection)
+      if (geometryCount > 100) {
+        console.warn('[Stats] High geometry count:', geometryCount, '- possible memory leak');
+      }
+
       frameCount.current = 0;
       lastTime.current = currentTime;
     }
