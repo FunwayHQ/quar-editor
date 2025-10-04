@@ -23,11 +23,12 @@ export interface Keyframe {
 export interface AnimationTrack {
   id: string;
   objectId: string;          // Which object is being animated
-  property: string;          // 'position', 'rotation', 'scale', 'materialProperty'
-  propertyPath: string[];    // Path to the property e.g., ['position', 'x'] or ['lightProps', 'intensity']
+  property: string;          // 'position', 'rotation', 'scale', 'materialProperty', 'shapeKey'
+  propertyPath: string[];    // Path to the property e.g., ['position', 'x'] or ['lightProps', 'intensity'] or ['shapeKey', 'shapeKeyId']
   keyframes: Keyframe[];
   enabled: boolean;
   color?: string;            // Track color in timeline UI
+  shapeKeyId?: string;       // For shape key tracks
 }
 
 // Animation (collection of tracks)

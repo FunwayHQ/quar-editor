@@ -6,10 +6,12 @@
  */
 
 import React, { useState } from 'react';
-import { Film, Trash2, Plus, Edit3, ChevronDown, ChevronRight } from 'lucide-react';
+import { Film, Trash2, Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import { useAnimationStore } from '../../stores/animationStore';
 import { useCommandStore } from '../../stores/commandStore';
-import { CreateAnimationCommand, DeleteAnimationCommand, UpdateAnimationCommand } from '../../lib/commands/AnimationCommands';
+import { CreateAnimationCommand, DeleteAnimationCommand } from '../../lib/commands/AnimationCommands';
+import { ConfirmDialog, useConfirmDialog } from '../ConfirmDialog';
+import { AnimationSettingsDialog, useAnimationSettingsDialog } from './AnimationSettingsDialog';
 
 export function AnimationPanel() {
   const {
@@ -17,14 +19,13 @@ export function AnimationPanel() {
     activeAnimationId,
     setActiveAnimation,
     createAnimation,
-    deleteAnimation,
     updateAnimation,
   } = useAnimationStore();
 
   const { executeCommand } = useCommandStore();
+  const { dialogProps, showConfirm } = useConfirmDialog();
+  const { dialogProps: settingsDialogProps, openSettings } = useAnimationSettingsDialog();
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const activeAnimation = activeAnimationId ? animations.get(activeAnimationId) : null;
@@ -36,48 +37,10 @@ export function AnimationPanel() {
     executeCommand(command);
   };
 
-  const handleDeleteAnimation = () => {
-    if (!activeAnimation) return;
-    if (!confirm(`Delete animation "${activeAnimation.name}"?`)) return;
-
-    const command = new DeleteAnimationCommand(activeAnimation);
-    executeCommand(command);
-  };
-
-  const handleStartEdit = () => {
-    if (!activeAnimation) return;
-    setEditName(activeAnimation.name);
-    setIsEditing(true);
-  };
-
-  const handleSaveEdit = () => {
-    if (!activeAnimation || !editName.trim()) {
-      setIsEditing(false);
-      return;
-    }
-
-    const command = new UpdateAnimationCommand(
-      activeAnimation.id,
-      { name: activeAnimation.name },
-      { name: editName.trim() }
-    );
-    executeCommand(command);
-    setIsEditing(false);
-  };
-
-  const handleDurationChange = (duration: number) => {
-    if (!activeAnimation) return;
-
-    const command = new UpdateAnimationCommand(
-      activeAnimation.id,
-      { duration: activeAnimation.duration },
-      { duration: Math.max(0.1, duration) }
-    );
-    executeCommand(command);
-  };
 
   return (
-    <div className="w-64 border-r border-[#27272A] flex flex-col bg-[#0A0A0B]/50">
+    <>
+      <div className="w-64 border-r border-[#27272A] flex flex-col bg-[#0A0A0B]/50 h-full">
       {/* Header */}
       <div className="p-3 border-b border-[#27272A] flex items-center justify-between">
         <button
@@ -103,7 +66,7 @@ export function AnimationPanel() {
 
       {/* Animation List */}
       {!isCollapsed && (
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="overflow-y-auto border-b border-[#27272A]" style={{ maxHeight: '200px', minHeight: allAnimations.length > 0 ? 'auto' : '0' }}>
         {allAnimations.length === 0 ? (
           <div className="p-4 text-center">
             <p className="text-xs text-[#A1A1AA] mb-2">No animations</p>
@@ -115,100 +78,105 @@ export function AnimationPanel() {
             </button>
           </div>
         ) : (
-          allAnimations.map((anim) => (
-            <div
-              key={anim.id}
-              onClick={() => setActiveAnimation(anim.id)}
-              className={`p-3 border-b border-[#27272A]/50 cursor-pointer transition-colors ${
-                anim.id === activeAnimationId
-                  ? 'bg-[#7C3AED]/20 border-l-2 border-l-[#7C3AED]'
-                  : 'hover:bg-[#27272A]/30'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-[#FAFAFA] font-medium">{anim.name}</span>
-                {anim.id === activeAnimationId && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteAnimation();
+          allAnimations.map((anim) => {
+            return (
+              <div
+                key={anim.id}
+                className={`group p-3 border-b border-[#27272A]/50 transition-colors ${
+                  anim.id === activeAnimationId
+                    ? 'bg-[#7C3AED]/20 border-l-2 border-l-[#7C3AED]'
+                    : 'hover:bg-[#27272A]/30'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span
+                    className="text-sm text-[#FAFAFA] font-medium flex-1 cursor-pointer"
+                    onClick={() => {
+                      console.log('[AnimationPanel] Selecting animation:', anim.name);
+                      setActiveAnimation(anim.id);
                     }}
-                    className="p-1 rounded hover:bg-[#EF4444]/20 transition-colors"
-                    title="Delete Animation"
                   >
-                    <Trash2 className="w-3 h-3 text-[#EF4444]" />
-                  </button>
-                )}
+                    {anim.name}
+                  </span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openSettings(anim);
+                      }}
+                      className="p-1 rounded hover:bg-[#7C3AED]/20 transition-all"
+                      title="Animation Settings"
+                    >
+                      <Settings className="w-3 h-3 text-[#7C3AED]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        showConfirm({
+                          title: 'Delete Animation',
+                          message: `Are you sure you want to delete "${anim.name}"? This action cannot be undone.`,
+                          variant: 'danger',
+                          icon: Trash2,
+                          confirmLabel: 'Delete',
+                          cancelLabel: 'Cancel',
+                          onConfirm: () => {
+                            // If deleting active animation, clear selection first
+                            if (anim.id === activeAnimationId) {
+                              setActiveAnimation(null);
+                            }
+                            const command = new DeleteAnimationCommand(anim);
+                            executeCommand(command);
+                          },
+                        });
+                      }}
+                      className="p-1 rounded hover:bg-[#EF4444]/20 transition-all"
+                      title="Delete Animation"
+                    >
+                      <Trash2 className="w-3 h-3 text-[#EF4444]" />
+                    </button>
+                  </div>
+                </div>
+                <div
+                  className="text-xs text-[#A1A1AA] cursor-pointer"
+                  onClick={() => setActiveAnimation(anim.id)}
+                >
+                  {anim.duration.toFixed(1)}s • {anim.tracks.length} tracks
+                </div>
               </div>
-              <div className="text-xs text-[#A1A1AA]">
-                {anim.duration.toFixed(1)}s • {anim.tracks.length} tracks
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
         </div>
       )}
 
-      {/* Active Animation Settings */}
+      {/* Active Animation Quick Actions */}
       {!isCollapsed && activeAnimation && (
-        <div className="border-t border-[#27272A] p-3 pb-6">
-          <h4 className="text-xs font-medium text-[#FAFAFA] mb-3">Settings</h4>
-
-          {/* Name */}
-          <div className="mb-3">
-            <label className="block text-xs text-[#A1A1AA] mb-1">Name</label>
-            {isEditing ? (
-              <div className="flex gap-1">
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveEdit();
-                    if (e.key === 'Escape') setIsEditing(false);
-                  }}
-                  autoFocus
-                  className="flex-1 px-2 py-1 text-xs bg-[#18181B] border border-[#7C3AED] rounded text-[#FAFAFA] focus:outline-none"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center gap-1">
-                <span className="flex-1 px-2 py-1 text-xs bg-[#18181B] border border-[#27272A] rounded text-[#FAFAFA]">
-                  {activeAnimation.name}
-                </span>
-                <button
-                  onClick={handleStartEdit}
-                  className="p-1 rounded hover:bg-[#27272A] transition-colors"
-                  title="Edit Name"
-                >
-                  <Edit3 className="w-3 h-3 text-[#A1A1AA]" />
-                </button>
-              </div>
-            )}
+        <div className="border-t border-[#27272A] p-3 overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-medium text-[#FAFAFA]">Active Animation</h4>
+            <button
+              onClick={() => openSettings(activeAnimation)}
+              className="p-1.5 rounded hover:bg-[#27272A] transition-colors"
+              title="Animation Settings"
+            >
+              <Settings className="w-4 h-4 text-[#7C3AED]" />
+            </button>
           </div>
 
-          {/* Duration */}
-          <div className="mb-6">
-            <label className="block text-xs text-[#A1A1AA] mb-1">Duration (seconds)</label>
-            <input
-              type="number"
-              value={activeAnimation.duration || 10}
-              onChange={(e) => handleDurationChange(parseFloat(e.target.value) || 10)}
-              min="0.1"
-              step="0.5"
-              className="w-full px-2 py-1 text-xs bg-[#18181B] border border-[#27272A] rounded text-[#FAFAFA] focus:outline-none focus:border-[#7C3AED]"
-            />
-          </div>
-
-          {/* Stats */}
-          <div className="text-xs text-[#71717A] mb-4">
-            <div>Tracks: {activeAnimation.tracks.length}</div>
-            <div>
-              Keyframes: {activeAnimation.tracks.reduce((sum, t) => sum + t.keyframes.length, 0)}
-            </div>
+          {/* Quick Stats */}
+          <div className="text-xs text-[#71717A] space-y-1">
+            <div>{activeAnimation.name}</div>
+            <div>{activeAnimation.duration.toFixed(1)}s • {activeAnimation.tracks.length} tracks</div>
+            <div>{activeAnimation.tracks.reduce((sum, t) => sum + t.keyframes.length, 0)} keyframes</div>
           </div>
         </div>
       )}
     </div>
+
+    <ConfirmDialog {...dialogProps} />
+    <AnimationSettingsDialog {...settingsDialogProps} />
+    </>
   );
 }

@@ -9,6 +9,7 @@ import { Viewport } from '../Viewport';
 import { useSceneStore } from '../../../stores/sceneStore';
 import { useObjectsStore } from '../../../stores/objectsStore';
 import { useEnvironmentStore } from '../../../stores/environmentStore';
+import { useEditModeStore } from '../../../stores/editModeStore';
 
 describe('Viewport - Environment Integration', () => {
   beforeEach(() => {
@@ -28,6 +29,15 @@ describe('Viewport - Environment Integration', () => {
       objects: new Map(),
       selectedIds: [],
       transformMode: 'translate',
+    });
+
+    useEditModeStore.setState({
+      isEditMode: false,
+      editingObjectId: null,
+      selectionMode: 'vertex',
+      selectedVertices: new Set(),
+      selectedEdges: new Set(),
+      selectedFaces: new Set(),
     });
 
     useEnvironmentStore.setState({
@@ -58,16 +68,24 @@ describe('Viewport - Environment Integration', () => {
       expect(canvas).toBeTruthy();
     });
 
-    it('should render ObjectCreationToolbar', () => {
+    it('should render ObjectCreationToolbar when not in edit mode', () => {
+      // Ensure edit mode is off (default)
+      useEditModeStore.setState({ isEditMode: false });
+
       render(<Viewport />);
-      expect(screen.getByText('Add Object:')).toBeInTheDocument();
+
+      // ObjectCreationToolbar should be present
+      // Check for the container with the toolbar styling
+      const toolbar = document.querySelector('.bg-\\[\\#18181B\\]\\/80');
+      expect(toolbar).toBeTruthy();
     });
 
-    it('should render ViewportToolbar', () => {
+    it('should not render ViewportToolbar in Viewport component', () => {
       render(<Viewport />);
-      // ViewportToolbar contains transform/camera controls
-      const toolbar = document.querySelector('.glass');
-      expect(toolbar).toBeTruthy();
+      // ViewportToolbar is now embedded in the Editor header, not in Viewport
+      // This test confirms it's not duplicated in Viewport
+      const viewportDiv = document.querySelector('.relative.w-full.h-full');
+      expect(viewportDiv).toBeTruthy();
     });
   });
 

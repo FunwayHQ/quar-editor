@@ -69,11 +69,8 @@ export function ObjectCreationToolbar() {
   const lights: ObjectType[] = ['pointLight', 'spotLight', 'directionalLight', 'ambientLight'];
 
   return (
-    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10">
-      <div className="flex gap-2 bg-[#18181B]/80 backdrop-blur-md border border-[#27272A] rounded-lg p-2 shadow-lg">
-        <div className="text-xs text-[#A1A1AA] px-2 py-1 flex items-center">
-          Add Object:
-        </div>
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+      <div className="flex items-center gap-2 bg-[#18181B]/80 backdrop-blur-md border border-[#27272A] rounded-lg px-3 py-2 shadow-lg">
         {primitives.map((type) => {
           const Icon = primitiveIcons[type];
           return (
@@ -84,7 +81,7 @@ export function ObjectCreationToolbar() {
               title={`Create ${primitiveLabels[type]}`}
             >
               <Icon className="w-5 h-5 text-[#FAFAFA]" />
-              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[#18181B] border border-[#27272A] rounded text-xs text-[#FAFAFA] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+              <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-[#18181B] border border-[#27272A] rounded text-xs text-[#FAFAFA] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                 {primitiveLabels[type]}
               </span>
             </button>
@@ -93,9 +90,6 @@ export function ObjectCreationToolbar() {
 
         <div className="w-px h-6 bg-[#27272A]" />
 
-        <div className="text-xs text-[#A1A1AA] px-2 py-1 flex items-center">
-          Lights:
-        </div>
         {lights.map((type) => {
           const Icon = primitiveIcons[type];
           return (
@@ -106,7 +100,7 @@ export function ObjectCreationToolbar() {
               title={`Create ${primitiveLabels[type]}`}
             >
               <Icon className="w-5 h-5 text-[#F59E0B]" />
-              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[#18181B] border border-[#27272A] rounded text-xs text-[#FAFAFA] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+              <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-[#18181B] border border-[#27272A] rounded text-xs text-[#FAFAFA] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                 {primitiveLabels[type]}
               </span>
             </button>

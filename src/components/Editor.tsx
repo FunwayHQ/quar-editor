@@ -7,7 +7,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Download } from 'lucide-react';
+import { ArrowLeft, Save, Download, FileDown } from 'lucide-react';
+import * as THREE from 'three';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
 import { useAppStore } from '../stores/appStore';
 import { useToastStore } from '../stores/toastStore';
@@ -15,12 +16,18 @@ import { useObjectsStore } from '../stores/objectsStore';
 import { useMaterialsStore } from '../stores/materialsStore';
 import { useAnimationStore } from '../stores/animationStore';
 import { useEnvironmentStore } from '../stores/environmentStore';
+import { useMorphTargetStore } from '../stores/morphTargetStore';
 import { Viewport } from './viewport/Viewport';
 import { HierarchyPanel } from './panels/HierarchyPanel';
 import { RightSidebar } from './panels/RightSidebar';
 import { Timeline } from './timeline/Timeline';
+import { ExportDialog } from './export/ExportDialog';
+import { EditOperationsPanel } from './panels/EditOperationsPanel';
+import { ViewportToolbar } from './viewport/ViewportToolbar';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useAnimationKeyframes } from '../hooks/useAnimationKeyframes';
+import { useEditModeStore } from '../stores/editModeStore';
+import { meshRegistry } from '../lib/mesh/MeshRegistry';
 
 export function Editor() {
   const { projectId } = useParams();
@@ -28,7 +35,9 @@ export function Editor() {
   const { setLastSaveTime, isOffline } = useAppStore();
   const { success, error: showError } = useToastStore();
   const [project, setProject] = useState<ProjectData | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { isEditMode } = useEditModeStore();
 
   const storage = getStorageAdapter();
 
@@ -90,7 +99,12 @@ export function Editor() {
 
         // Restore objects
         if (scene.objects) {
+          console.log(`[Editor] Loading ${scene.objects.length} objects from saved data`);
           scene.objects.forEach((obj: any) => {
+            // Log if object has saved geometry data
+            if (obj.geometry?.data) {
+              console.log(`[Editor] Object ${obj.name} has saved geometry data (${obj.geometry.data.attributes?.position?.array.length / 3} vertices)`);
+            }
             useObjectsStore.getState().objects.set(obj.id, obj);
           });
         }
@@ -122,6 +136,43 @@ export function Editor() {
           useEnvironmentStore.setState(scene.environment);
         }
 
+        // Restore shape keys
+        if (scene.shapeKeys) {
+          const morphState = useMorphTargetStore.getState();
+          const newShapeKeysMap = new Map();
+
+          scene.shapeKeys.forEach(([objectId, shapeKeys]: [string, any[]]) => {
+            newShapeKeysMap.set(objectId, shapeKeys);
+          });
+
+          morphState.shapeKeysByObject = newShapeKeysMap;
+        }
+
+        // Restore base poses
+        if (scene.basePoses) {
+          const morphState = useMorphTargetStore.getState();
+          const newBasePoses = new Map();
+
+          scene.basePoses.forEach(({ objectId, geometryData }: any) => {
+            // Deserialize geometry
+            const geometry = new THREE.BufferGeometry();
+
+            if (geometryData.attributes.position) {
+              geometry.setAttribute(
+                'position',
+                new THREE.BufferAttribute(
+                  new Float32Array(geometryData.attributes.position.array),
+                  geometryData.attributes.position.itemSize
+                )
+              );
+            }
+
+            newBasePoses.set(objectId, geometry);
+          });
+
+          morphState.basePoses = newBasePoses;
+        }
+
         console.log('[Editor] Scene data restored from storage');
       }
     } catch (error) {
@@ -139,9 +190,99 @@ export function Editor() {
     const materialsState = useMaterialsStore.getState();
     const animationState = useAnimationStore.getState();
     const envState = useEnvironmentStore.getState();
+    const morphState = useMorphTargetStore.getState();
+
+    // Serialize objects with current geometry from mesh registry
+    const objects = Array.from(objectsState.objects.values()).map(obj => {
+      const mesh = meshRegistry.getMesh(obj.id);
+
+      // If mesh exists in registry with modified geometry, serialize it
+      if (mesh && mesh.geometry) {
+        const geometry = mesh.geometry;
+        const geometryData = {
+          attributes: {} as any,
+          index: null as any,
+        };
+
+        // Serialize position attribute
+        if (geometry.attributes.position) {
+          const pos = geometry.attributes.position;
+          geometryData.attributes.position = {
+            array: Array.from(pos.array),
+            itemSize: pos.itemSize,
+          };
+        }
+
+        // Serialize normal attribute
+        if (geometry.attributes.normal) {
+          const norm = geometry.attributes.normal;
+          geometryData.attributes.normal = {
+            array: Array.from(norm.array),
+            itemSize: norm.itemSize,
+          };
+        }
+
+        // Serialize UV attribute
+        if (geometry.attributes.uv) {
+          const uv = geometry.attributes.uv;
+          geometryData.attributes.uv = {
+            array: Array.from(uv.array),
+            itemSize: uv.itemSize,
+          };
+        }
+
+        // Serialize index
+        if (geometry.index) {
+          geometryData.index = {
+            array: Array.from(geometry.index.array),
+          };
+        }
+
+        // Log that we're saving modified geometry
+        console.log(`[Editor] Saving modified geometry for ${obj.name}, vertices: ${geometryData.attributes.position?.array.length / 3}`);
+
+        // Return object with updated geometry data
+        return {
+          ...obj,
+          geometry: {
+            ...obj.geometry,
+            data: geometryData,
+          }
+        };
+      }
+
+      // Return object as-is if no mesh in registry
+      return obj;
+    });
+
+    // Serialize shape keys
+    const shapeKeysByObject = Array.from(morphState.shapeKeysByObject.entries());
+
+    // Serialize base poses
+    const basePoses: any[] = [];
+    morphState.basePoses.forEach((geom, objectId) => {
+      const geometryData = {
+        attributes: {} as any,
+        index: null as any,
+      };
+
+      if (geom.attributes.position) {
+        const pos = geom.attributes.position;
+        geometryData.attributes.position = {
+          array: Array.from(pos.array),
+          itemSize: pos.itemSize,
+        };
+      }
+
+      basePoses.push({ objectId, geometryData });
+    });
+
+    console.log(`[Editor] Serializing ${objects.length} objects, ${shapeKeysByObject.length} shape key sets`);
 
     return {
-      objects: Array.from(objectsState.objects.values()),
+      objects,
+      shapeKeys: shapeKeysByObject,
+      basePoses,
       materials: Array.from(materialsState.materials.values()),
       objectMaterials: Array.from(materialsState.objectMaterials.entries()),
       textures: Array.from(materialsState.textures.values()),
@@ -236,8 +377,9 @@ export function Editor() {
 
   return (
     <div className="h-screen bg-background flex flex-col">
-      {/* Top Toolbar */}
-      <header className="border-b border-border p-3 flex items-center justify-between">
+      {/* Top Toolbar - Three column grid for perfect centering */}
+      <header className="border-b border-border p-3 grid grid-cols-3 items-center">
+        {/* Left Column */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/')}
@@ -254,6 +396,7 @@ export function Editor() {
             value={project.name}
             onChange={(e) => setProject({ ...project, name: e.target.value })}
             className="input bg-transparent border-none text-lg font-semibold focus:ring-0 px-2"
+            title="Click to rename project"
             style={{ width: `${project.name.length + 2}ch` }}
           />
 
@@ -264,18 +407,32 @@ export function Editor() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={saveProject} className="btn-secondary flex items-center gap-2">
+        {/* Center Column - Always centered regardless of left/right content */}
+        <div className="flex items-center justify-center" style={{ marginLeft: '-70px' }}>
+          {!isEditMode && <ViewportToolbar embedded={true} />}
+        </div>
+
+        {/* Right Column */}
+        <div className="flex items-center gap-2 justify-end">
+          <button onClick={saveProject} className="btn-secondary flex items-center gap-2" title="Save project">
             <Save className="w-4 h-4" />
             Save
           </button>
 
-          <button onClick={downloadQuar} className="btn-ghost flex items-center gap-2">
+          <button onClick={() => setShowExportDialog(true)} className="btn-secondary flex items-center gap-2" title="Export scene">
+            <FileDown className="w-4 h-4" />
+            Export
+          </button>
+
+          <button onClick={downloadQuar} className="btn-ghost flex items-center gap-2" title="Download .quar file">
             <Download className="w-4 h-4" />
             Download .quar
           </button>
         </div>
       </header>
+
+      {/* Export Dialog */}
+      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
 
       {/* Main Editor Area */}
       <main className="flex-1 relative flex flex-col overflow-hidden">
@@ -285,8 +442,9 @@ export function Editor() {
           <HierarchyPanel />
 
           {/* Center - Viewport */}
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <Viewport />
+            {isEditMode && <EditOperationsPanel />}
           </div>
 
           {/* Right Sidebar - Properties & Material */}

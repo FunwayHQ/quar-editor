@@ -14,9 +14,11 @@ import {
   Unlock,
   Trash2,
   Copy,
+  Edit3,
 } from 'lucide-react';
 import { useObjectsStore, SceneObject } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
+import { useEditModeStore } from '../../stores/editModeStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand, UpdateObjectCommand } from '../../lib/commands/ObjectCommands';
 
 interface ObjectTreeItemProps {
@@ -171,9 +173,16 @@ export function HierarchyPanel() {
   const selectedIds = useObjectsStore((state) => state.selectedIds);
   const toggleSelection = useObjectsStore((state) => state.toggleSelection);
   const executeCommand = useCommandStore((state) => state.executeCommand);
+  const { enterEditMode } = useEditModeStore();
 
   // Filter to show only root-level objects (no parent)
   const rootObjects = objects.filter((obj) => obj.parentId === null);
+
+  const handleEnterEditMode = () => {
+    if (selectedIds.length === 1) {
+      enterEditMode(selectedIds[0]);
+    }
+  };
 
   const handleDelete = () => {
     if (selectedIds.length === 0) return;
@@ -193,6 +202,14 @@ export function HierarchyPanel() {
       <div className="flex items-center justify-between p-3 border-b border-[#27272A]">
         <h2 className="text-sm font-medium text-[#FAFAFA]">Hierarchy</h2>
         <div className="flex items-center gap-1">
+          <button
+            onClick={handleEnterEditMode}
+            disabled={selectedIds.length !== 1}
+            className="p-1.5 rounded hover:bg-[#27272A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Edit Mode (Tab)"
+          >
+            <Edit3 className="w-4 h-4 text-[#A1A1AA]" />
+          </button>
           <button
             onClick={handleDuplicate}
             disabled={selectedIds.length === 0}

@@ -57,14 +57,26 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       'react': path.resolve(__dirname, './node_modules/react'),
       'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
+      'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime'),
+      'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime'),
     },
-    dedupe: ['react', 'react-dom', 'three', 'zustand']
+    dedupe: ['react', 'react-dom', 'three', 'zustand', '@react-three/fiber', '@react-three/drei']
   },
   server: {
-    port: 3001
+    port: 5173,
+    hmr: {
+      overlay: true,
+      port: 5173
+    },
+    watch: {
+      usePolling: true
+    },
+    force: true
   },
   optimizeDeps: {
     exclude: ['@playwright/test', 'playwright-core'], // Don't pre-bundle Playwright
+    include: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+    force: true // Force re-optimization
   },
   build: {
     target: 'esnext',

@@ -5,11 +5,15 @@
  * Now with full PBR material support from materials store.
  */
 
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { SceneObject as SceneObjectType } from '../../stores/objectsStore';
 import { useMaterialsStore } from '../../stores/materialsStore';
 import { useSceneStore } from '../../stores/sceneStore';
+import { useEditModePicking } from '../../hooks/useEditModePicking';
+import { EditModeHelpers } from './EditModeHelpers';
+import { useEditModeStore } from '../../stores/editModeStore';
+import { meshRegistry } from '../../lib/mesh/MeshRegistry';
 
 interface SceneObjectProps {
   object: SceneObjectType;
@@ -24,6 +28,10 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   // Get shading mode from scene store
   const shadingMode = useSceneStore((state) => state.shadingMode);
 
+  // Edit mode picking
+  const { handleEditModeClick, isEditMode } = useEditModePicking();
+  const { editingObjectId } = useEditModeStore();
+
   // Get material assigned to this object - subscribe to materials Map for reactivity
   const objectMaterials = useMaterialsStore((state) => state.objectMaterials);
   const materials = useMaterialsStore((state) => state.materials);
@@ -37,6 +45,61 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
   // Create geometry based on object type
   const geometry = useMemo(() => {
+    // PRIORITY 1: Check if we have saved geometry data (from edit mode modifications)
+    if (object.geometry?.data) {
+      console.log(`[SceneObject] Restoring saved geometry for ${object.name}`);
+      const geo = new THREE.BufferGeometry();
+      const data = object.geometry.data;
+
+      // Restore position attribute
+      if (data.attributes?.position) {
+        geo.setAttribute(
+          'position',
+          new THREE.Float32BufferAttribute(
+            new Float32Array(data.attributes.position.array),
+            data.attributes.position.itemSize
+          )
+        );
+      }
+
+      // Restore normal attribute
+      if (data.attributes?.normal) {
+        geo.setAttribute(
+          'normal',
+          new THREE.Float32BufferAttribute(
+            new Float32Array(data.attributes.normal.array),
+            data.attributes.normal.itemSize
+          )
+        );
+      }
+
+      // Restore UV attribute
+      if (data.attributes?.uv) {
+        geo.setAttribute(
+          'uv',
+          new THREE.Float32BufferAttribute(
+            new Float32Array(data.attributes.uv.array),
+            data.attributes.uv.itemSize
+          )
+        );
+      }
+
+      // Restore index
+      if (data.index) {
+        geo.setIndex(
+          new THREE.Uint32BufferAttribute(
+            new Uint32Array(data.index.array),
+            1
+          )
+        );
+      }
+
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+
+      return geo;
+    }
+
     // Handle imported geometry
     if (object.type === 'imported' && object.importedGeometry) {
       const geo = new THREE.BufferGeometry();
@@ -61,7 +124,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       return geo;
     }
 
-    // Handle primitives
+    // Handle primitives (only if no saved data)
     const params = object.geometryParams || {};
 
     switch (object.type) {
@@ -105,7 +168,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       default:
         return new THREE.BoxGeometry(1, 1, 1);
     }
-  }, [object.type, object.geometryParams, object.importedGeometry]);
+  }, [object.type, object.geometryParams, object.importedGeometry, object.geometry]);
 
   // Create material with PBR properties
   const material = useMemo(() => {
@@ -230,10 +293,28 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     getTexture,
   ]);
 
+  // Register mesh with registry when it's available
+  useEffect(() => {
+    if (meshRef.current && !isLight) {
+      meshRegistry.registerMesh(object.id, meshRef.current);
+
+      return () => {
+        meshRegistry.unregisterMesh(object.id);
+      };
+    }
+  }, [object.id, isLight]);
+
   // Handle click
   const handleClick = (event: THREE.Event) => {
     event.stopPropagation();
-    onSelect(object.id, event.nativeEvent.shiftKey || event.nativeEvent.ctrlKey || event.nativeEvent.metaKey);
+
+    // If in edit mode, handle edit mode picking instead of object selection
+    if (isEditMode && meshRef.current) {
+      handleEditModeClick(event, meshRef.current);
+    } else {
+      // Normal object selection
+      onSelect(object.id, event.nativeEvent.shiftKey || event.nativeEvent.ctrlKey || event.nativeEvent.metaKey);
+    }
   };
 
   if (!object.visible) return null;
@@ -346,17 +427,24 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
   // Render meshes
   return (
-    <mesh
-      ref={meshRef}
-      geometry={geometry}
-      material={material}
-      position={object.position}
-      rotation={object.rotation}
-      scale={object.scale}
-      onClick={handleClick}
-      userData={{ id: object.id, type: object.type }}
-      castShadow
-      receiveShadow
-    />
+    <>
+      <mesh
+        ref={meshRef}
+        key={`${object.id}-${shadingMode}`}
+        geometry={geometry}
+        material={material}
+        position={object.position}
+        rotation={object.rotation}
+        scale={object.scale}
+        onClick={handleClick}
+        userData={{ id: object.id, type: object.type }}
+        castShadow
+        receiveShadow
+      />
+      {/* Edit mode helpers for vertex/edge/face selection */}
+      {isEditMode && editingObjectId === object.id && meshRef.current && (
+        <EditModeHelpers mesh={meshRef.current} objectId={object.id} />
+      )}
+    </>
   );
 }

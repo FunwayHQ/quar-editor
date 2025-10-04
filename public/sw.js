@@ -4,7 +4,7 @@
  * Provides offline support and caching for PWA.
  */
 
-const CACHE_NAME = 'quar-editor-v1';
+const CACHE_NAME = 'quar-editor-v2-fixed';
 const OFFLINE_URL = '/';
 
 // Assets to cache on install

@@ -9,7 +9,11 @@ import { useSceneStore } from '@/stores/sceneStore';
 import { useObjectsStore } from '@/stores/objectsStore';
 import { CameraPresetButtons } from './CameraPresetButtons';
 
-export function ViewportToolbar() {
+interface ViewportToolbarProps {
+  embedded?: boolean;
+}
+
+export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
   const {
     shadingMode,
     setShadingMode,
@@ -33,8 +37,13 @@ export function ViewportToolbar() {
     { mode: 'scale', label: 'Scale', icon: Scaling, shortcut: 'R' },
   ];
 
+  // Different styling for embedded vs floating
+  const containerClass = embedded
+    ? "flex items-center gap-4"
+    : "absolute top-4 left-1/2 transform -translate-x-1/2 glass px-4 py-2 flex items-center gap-4 z-10";
+
   return (
-    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 glass px-4 py-2 flex items-center gap-4 z-10">
+    <div className={containerClass}>
       {/* Transform Modes (only show if something is selected) */}
       {selectedIds.length > 0 && (
         <>

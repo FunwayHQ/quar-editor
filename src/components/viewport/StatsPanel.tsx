@@ -19,7 +19,7 @@ export function StatsPanel() {
   };
 
   return (
-    <div className="absolute top-16 left-4 glass px-4 py-3 text-xs font-mono space-y-1 z-10">
+    <div className="absolute top-4 left-4 glass px-4 py-2 text-xs font-mono space-y-1 z-10">
       <div className="flex items-center gap-2">
         <span className="text-text-secondary">FPS:</span>
         <span className={`font-semibold ${getFpsColor(stats.fps)}`}>

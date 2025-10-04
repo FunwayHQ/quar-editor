@@ -47,7 +47,8 @@ export class DeleteAnimationCommand extends Command {
   }
 
   execute(): void {
-    useAnimationStore.getState().deleteAnimation(this.animation.id);
+    const store = useAnimationStore.getState();
+    store.deleteAnimation(this.animation.id);
   }
 
   undo(): void {

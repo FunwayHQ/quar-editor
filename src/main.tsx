@@ -10,7 +10,9 @@ import App from './App';
 import './index.css';
 import { initializeDatabase } from './lib/storage/db';
 
-// Register service worker for PWA
+// Service worker disabled for development
+// TODO: Re-enable for production build
+/*
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((error) => {
@@ -18,6 +20,7 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+*/
 
 // Initialize database before rendering app
 async function init() {

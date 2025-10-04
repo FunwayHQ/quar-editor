@@ -13,11 +13,14 @@ import { OrbitControls, Environment } from '@react-three/drei';
 import { useSceneStore } from '@/stores/sceneStore';
 import { useObjectsStore } from '@/stores/objectsStore';
 import { useEnvironmentStore } from '@/stores/environmentStore';
+import { useEditModeStore } from '@/stores/editModeStore';
 import { ViewportToolbar } from './ViewportToolbar';
 import { StatsPanel } from './StatsPanel';
 import { ObjectCreationToolbar } from './ObjectCreationToolbar';
 import { SceneObject } from './SceneObject';
 import { TransformGizmo } from './TransformGizmo';
+import { EditTransformControls } from './EditTransformControls';
+import { EditModeToolbar } from './EditModeToolbar';
 import { useCameraPresets } from './CameraPresets';
 import * as THREE from 'three';
 import { useEffect } from 'react';
@@ -29,6 +32,8 @@ function Scene() {
   const selectedIds = useObjectsStore((state) => state.selectedIds);
   const toggleSelection = useObjectsStore((state) => state.toggleSelection);
   const clearSelection = useObjectsStore((state) => state.clearSelection);
+  const transformMode = useObjectsStore((state) => state.transformMode);
+  const { isEditMode } = useEditModeStore();
 
   // Environment settings
   const {
@@ -128,24 +133,37 @@ function Scene() {
         <meshBasicMaterial transparent opacity={0} />
       </mesh>
 
-      {/* Transform Gizmo */}
-      <TransformGizmo />
+      {/* Transform Controls */}
+      {isEditMode ? (
+        <EditTransformControls mode={transformMode} />
+      ) : (
+        <TransformGizmo />
+      )}
+
     </>
   );
 }
 
 export function Viewport() {
   const { showStats } = useSceneStore();
+  const { isEditMode } = useEditModeStore();
+  const { clearSelection } = useObjectsStore();
+  const { clearSelection: clearEditSelection } = useEditModeStore();
+
+  const handleBackgroundClick = () => {
+    if (isEditMode) {
+      clearEditSelection();
+    } else {
+      clearSelection();
+    }
+  };
 
   return (
     <div className="relative w-full h-full bg-background">
-      {/* Object Creation Toolbar */}
-      <ObjectCreationToolbar />
+      {/* Object Creation Toolbar (hide in edit mode) - moved closer to top */}
+      {!isEditMode && <ObjectCreationToolbar />}
 
-      {/* Viewport Toolbar */}
-      <ViewportToolbar />
-
-      {/* Stats Panel */}
+      {/* Stats Panel - moved closer to top */}
       {showStats && <StatsPanel />}
 
       {/* 3D Canvas */}
@@ -155,6 +173,7 @@ export function Viewport() {
           position: [5, 5, 5],
           fov: 50,
         }}
+        onPointerMissed={handleBackgroundClick}
         onCreated={({ gl }) => {
           // Handle WebGL context loss
           gl.domElement.addEventListener('webglcontextlost', (event) => {
@@ -182,6 +201,9 @@ export function Viewport() {
         {/* Scene Content */}
         <Scene />
       </Canvas>
+
+      {/* Edit Mode Toolbar */}
+      <EditModeToolbar />
     </div>
   );
 }

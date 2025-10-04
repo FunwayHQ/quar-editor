@@ -8,6 +8,7 @@
 import { Animation, AnimationTrack, Keyframe } from '../../stores/animationStore';
 import { getValueAtTime } from './Interpolators';
 import { useObjectsStore } from '../../stores/objectsStore';
+import { useMorphTargetStore } from '../../stores/morphTargetStore';
 
 /**
  * Animation Engine - Handles playback and property updates
@@ -104,13 +105,19 @@ export class AnimationEngine {
 
       this.cachedTrackValues.set(cacheKey, value);
 
-      // Collect updates per object
-      if (!updates.has(track.objectId)) {
-        updates.set(track.objectId, {});
-      }
+      // Handle shape key tracks differently
+      if (track.property === 'shapeKey' && track.shapeKeyId) {
+        const morphStore = useMorphTargetStore.getState();
+        morphStore.setShapeKeyValue(track.shapeKeyId, value);
+      } else {
+        // Collect updates per object for regular properties
+        if (!updates.has(track.objectId)) {
+          updates.set(track.objectId, {});
+        }
 
-      const objectUpdates = updates.get(track.objectId);
-      this.buildPropertyUpdate(track, value, objectUpdates);
+        const objectUpdates = updates.get(track.objectId);
+        this.buildPropertyUpdate(track, value, objectUpdates);
+      }
     });
 
     // Apply all updates in a single batch

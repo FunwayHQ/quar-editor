@@ -81,7 +81,26 @@ export function PlaybackControls() {
     stop();
     engine.stop();
     setCurrentTime(0);
+
+    // Reset objects to initial state
+    if (activeAnimation) {
+      engine.seekTo(activeAnimation, 0);
+    }
   };
+
+  // Listen for keyboard shortcut warning trigger
+  useEffect(() => {
+    const handleShowWarning = () => {
+      if (autoKeyframe && !isPaused) {
+        setShowRecordingWarning(true);
+      }
+    };
+
+    window.addEventListener('showRecordingWarning', handleShowWarning);
+    return () => {
+      window.removeEventListener('showRecordingWarning', handleShowWarning);
+    };
+  }, [autoKeyframe, isPaused]);
 
   // Cleanup on unmount
   useEffect(() => {
