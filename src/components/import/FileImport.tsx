@@ -14,6 +14,8 @@ import { useObjectsStore, SceneObject } from '../../stores/objectsStore';
 import { useMaterialsStore } from '../../stores/materialsStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { CreateObjectCommand } from '../../lib/commands/ObjectCommands';
+import { useCurveStore } from '../../stores/curveStore';
+import { SVGParser } from '../../lib/curves/SVGParser';
 
 export function FileImport() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -23,6 +25,7 @@ export function FileImport() {
   const executeCommand = useCommandStore((state) => state.executeCommand);
   const addMaterial = useMaterialsStore((state) => state.addMaterial);
   const assignMaterialToObject = useMaterialsStore((state) => state.assignMaterialToObject);
+  const addCurve = useCurveStore((state) => state.addCurve);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -31,14 +34,16 @@ export function FileImport() {
     const extension = file.name.split('.').pop()?.toLowerCase();
 
     try {
-      if (extension === 'glb' || extension === 'gltf') {
+      if (extension === 'svg') {
+        await importSVG(file);
+      } else if (extension === 'glb' || extension === 'gltf') {
         await importGLTF(file);
       } else if (extension === 'fbx') {
         await importFBX(file);
       } else if (extension === 'obj') {
         await importOBJ(file);
       } else {
-        alert(`File format .${extension} is not supported yet. Supported formats: GLB, GLTF, FBX, OBJ`);
+        alert(`File format .${extension} is not supported yet. Supported formats: SVG, GLB, GLTF, FBX, OBJ`);
       }
     } catch (error) {
       console.error('Failed to import file:', error);
@@ -48,6 +53,35 @@ export function FileImport() {
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const importSVG = async (file: File) => {
+    console.log('[FileImport] Starting SVG import:', file.name);
+    const text = await file.text();
+    console.log('[FileImport] SVG file read, length:', text.length);
+
+    try {
+      const parsedCurves = SVGParser.parse(text);
+      console.log('[FileImport] Parsed curves:', parsedCurves);
+
+      if (parsedCurves.length === 0) {
+        alert('No curves found in SVG file. Make sure your SVG contains paths or basic shapes.');
+        return;
+      }
+
+      // Create Curve objects and add to store
+      parsedCurves.forEach(parsed => {
+        const curve = SVGParser.createCurve(parsed);
+        console.log('[FileImport] Created curve:', curve.name, 'with', curve.points.length, 'points');
+        addCurve(curve);
+      });
+
+      console.log(`[FileImport] Successfully imported ${parsedCurves.length} curves from SVG`);
+    } catch (error) {
+      console.error('[FileImport] Failed to parse SVG:', error);
+      alert(`Failed to import SVG: ${error}`);
+      throw error;
     }
   };
 
@@ -357,7 +391,7 @@ export function FileImport() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".glb,.gltf,.fbx,.obj"
+        accept=".svg,.glb,.gltf,.fbx,.obj"
         onChange={handleFileSelect}
         className="hidden"
       />

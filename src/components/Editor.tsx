@@ -17,6 +17,7 @@ import { useMaterialsStore } from '../stores/materialsStore';
 import { useAnimationStore } from '../stores/animationStore';
 import { useEnvironmentStore } from '../stores/environmentStore';
 import { useMorphTargetStore } from '../stores/morphTargetStore';
+import { useCurveStore } from '../stores/curveStore';
 import { Viewport } from './viewport/Viewport';
 import { HierarchyPanel } from './panels/HierarchyPanel';
 import { RightSidebar } from './panels/RightSidebar';
@@ -139,6 +140,35 @@ export function Editor() {
           useEnvironmentStore.setState(scene.environment);
         }
 
+        // Restore curves
+        if (scene.curves) {
+          console.log(`[Editor] Loading ${scene.curves.length} curves from saved data`);
+          scene.curves.forEach((curveData: any) => {
+            const curve = {
+              ...curveData,
+              // Convert back to Vector2/Vector3/Euler
+              points: curveData.points.map((p: any) => new THREE.Vector2(p.x, p.y)),
+              transform: {
+                position: new THREE.Vector3(
+                  curveData.transform.position.x,
+                  curveData.transform.position.y,
+                  curveData.transform.position.z
+                ),
+                rotation: new THREE.Euler(
+                  curveData.transform.rotation.x,
+                  curveData.transform.rotation.y,
+                  curveData.transform.rotation.z
+                ),
+                scale: new THREE.Vector2(
+                  curveData.transform.scale.x,
+                  curveData.transform.scale.y
+                )
+              }
+            };
+            useCurveStore.getState().curves.set(curve.id, curve);
+          });
+        }
+
         // Restore shape keys
         if (scene.shapeKeys) {
           const morphState = useMorphTargetStore.getState();
@@ -194,6 +224,7 @@ export function Editor() {
     const animationState = useAnimationStore.getState();
     const envState = useEnvironmentStore.getState();
     const morphState = useMorphTargetStore.getState();
+    const curveState = useCurveStore.getState();
 
     // Serialize objects with current geometry from mesh registry
     const objects = Array.from(objectsState.objects.values()).map(obj => {
@@ -309,6 +340,16 @@ export function Editor() {
         groundPlaneColor: envState.groundPlaneColor,
         groundPlaneReceiveShadow: envState.groundPlaneReceiveShadow,
       },
+      curves: Array.from(curveState.curves.values()).map(curve => ({
+        ...curve,
+        // Convert Vector2/Vector3/Euler to serializable format
+        points: curve.points.map(p => ({ x: p.x, y: p.y })),
+        transform: {
+          position: { x: curve.transform.position.x, y: curve.transform.position.y, z: curve.transform.position.z },
+          rotation: { x: curve.transform.rotation.x, y: curve.transform.rotation.y, z: curve.transform.rotation.z },
+          scale: { x: curve.transform.scale.x, y: curve.transform.scale.y }
+        }
+      })),
     };
   };
 

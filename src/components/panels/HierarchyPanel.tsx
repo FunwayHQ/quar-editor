@@ -15,11 +15,15 @@ import {
   Trash2,
   Copy,
   Edit3,
+  Layers,
+  Spline,
 } from 'lucide-react';
 import { useObjectsStore, SceneObject } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { useEditModeStore } from '../../stores/editModeStore';
+import { useCurveStore } from '../../stores/curveStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand, UpdateObjectCommand } from '../../lib/commands/ObjectCommands';
+import { CurvePanel } from './CurvePanel';
 
 interface ObjectTreeItemProps {
   object: SceneObject;
@@ -169,9 +173,12 @@ function ObjectTreeItem({ object, isSelected, onSelect, depth }: ObjectTreeItemP
 }
 
 export function HierarchyPanel() {
+  const [activeTab, setActiveTab] = useState<'objects' | 'curves'>('objects');
   const objects = useObjectsStore((state) => state.getAllObjects());
   const selectedIds = useObjectsStore((state) => state.selectedIds);
   const toggleSelection = useObjectsStore((state) => state.toggleSelection);
+  const clearObjectSelection = useObjectsStore((state) => state.clearSelection);
+  const clearCurveSelection = useCurveStore((state) => state.clearSelection);
   const executeCommand = useCommandStore((state) => state.executeCommand);
   const { enterEditMode } = useEditModeStore();
 
@@ -198,10 +205,39 @@ export function HierarchyPanel() {
 
   return (
     <div className="w-64 h-full bg-[#18181B]/80 backdrop-blur-md border-r border-[#27272A] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-[#27272A]">
-        <h2 className="text-sm font-medium text-[#FAFAFA]">Hierarchy</h2>
-        <div className="flex items-center gap-1">
+      {/* Tabs */}
+      <div className="flex border-b border-[#27272A]">
+        <button
+          onClick={() => setActiveTab('objects')}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            activeTab === 'objects'
+              ? 'text-[#FAFAFA] border-b-2 border-purple-500'
+              : 'text-[#A1A1AA] hover:text-[#FAFAFA]'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Objects
+        </button>
+        <button
+          onClick={() => setActiveTab('curves')}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            activeTab === 'curves'
+              ? 'text-[#FAFAFA] border-b-2 border-purple-500'
+              : 'text-[#A1A1AA] hover:text-[#FAFAFA]'
+          }`}
+        >
+          <Spline className="w-4 h-4" />
+          Curves
+        </button>
+      </div>
+
+      {/* Objects Tab Content */}
+      {activeTab === 'objects' && (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b border-[#27272A]">
+            <h2 className="text-sm font-medium text-[#FAFAFA]">Scene</h2>
+            <div className="flex items-center gap-1">
           <button
             onClick={handleEnterEditMode}
             disabled={selectedIds.length !== 1}
@@ -226,11 +262,19 @@ export function HierarchyPanel() {
           >
             <Trash2 className="w-4 h-4 text-[#A1A1AA]" />
           </button>
-        </div>
-      </div>
+            </div>
+          </div>
 
-      {/* Object Tree */}
-      <div className="flex-1 overflow-y-auto">
+          {/* Object Tree */}
+          <div
+            className="flex-1 overflow-y-auto"
+            onClick={(e) => {
+              // Deselect when clicking empty space
+              if (e.target === e.currentTarget) {
+                clearObjectSelection();
+              }
+            }}
+          >
         {rootObjects.length === 0 ? (
           <div className="p-4 text-center text-sm text-[#A1A1AA]">
             No objects in scene
@@ -250,7 +294,24 @@ export function HierarchyPanel() {
             ))}
           </div>
         )}
-      </div>
+          </div>
+        </>
+      )}
+
+      {/* Curves Tab Content */}
+      {activeTab === 'curves' && (
+        <div
+          className="flex-1 overflow-y-auto"
+          onClick={(e) => {
+            // Deselect when clicking empty space
+            if (e.target === e.currentTarget) {
+              clearCurveSelection();
+            }
+          }}
+        >
+          <CurvePanel />
+        </div>
+      )}
     </div>
   );
 }

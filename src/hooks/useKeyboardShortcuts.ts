@@ -13,6 +13,9 @@ import { useKnifeToolStore } from '../stores/knifeToolStore';
 import { useSceneStore } from '../stores/sceneStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand } from '../lib/commands/ObjectCommands';
 import { getAnimationEngine } from '../lib/animation/AnimationEngine';
+import { DeleteVerticesCommand } from '../lib/commands/EditModeCommands';
+import { meshRegistry } from '../lib/mesh/MeshRegistry';
+import * as THREE from 'three';
 
 export function useKeyboardShortcuts() {
   const { selectedIds, setTransformMode } = useObjectsStore();
@@ -20,6 +23,7 @@ export function useKeyboardShortcuts() {
   const { isPlaying, isPaused, activeAnimationId, animations, currentTime, play, pause, stop, setCurrentTime, autoKeyframe, playbackSpeed } = useAnimationStore();
   const {
     isEditMode,
+    editingObjectId,
     selectionMode,
     enterEditMode,
     exitEditMode,
@@ -29,6 +33,126 @@ export function useKeyboardShortcuts() {
     selectedFaces,
     clearSelection: clearEditSelection,
   } = useEditModeStore();
+
+  // Helper: Delete selected vertices
+  const handleDeleteVertices = (objectId: string, vertices: Set<number>) => {
+    const mesh = meshRegistry.getMesh(objectId);
+    if (!mesh || !mesh.geometry) return;
+
+    const oldGeometry = mesh.geometry.clone();
+
+    // Create new geometry without selected vertices
+    const positions = mesh.geometry.attributes.position;
+    const indices = mesh.geometry.index;
+
+    if (!indices) {
+      console.warn('[Delete] Geometry must be indexed');
+      return;
+    }
+
+    // Build new vertex list (excluding selected)
+    const vertexArray = Array.from(vertices);
+    const newPositions: number[] = [];
+    const newIndices: number[] = [];
+    const vertexMap = new Map<number, number>(); // old index -> new index
+    let newIndex = 0;
+
+    // Copy non-deleted vertices
+    for (let i = 0; i < positions.count; i++) {
+      if (!vertexArray.includes(i)) {
+        newPositions.push(positions.getX(i), positions.getY(i), positions.getZ(i));
+        vertexMap.set(i, newIndex);
+        newIndex++;
+      }
+    }
+
+    // Rebuild indices (skip faces with deleted vertices)
+    for (let i = 0; i < indices.count; i += 3) {
+      const i0 = indices.array[i];
+      const i1 = indices.array[i + 1];
+      const i2 = indices.array[i + 2];
+
+      // Skip if any vertex is deleted
+      if (vertexArray.includes(i0) || vertexArray.includes(i1) || vertexArray.includes(i2)) {
+        continue;
+      }
+
+      // Remap indices
+      const newI0 = vertexMap.get(i0);
+      const newI1 = vertexMap.get(i1);
+      const newI2 = vertexMap.get(i2);
+
+      if (newI0 !== undefined && newI1 !== undefined && newI2 !== undefined) {
+        newIndices.push(newI0, newI1, newI2);
+      }
+    }
+
+    // Create new geometry
+    const newGeometry = new THREE.BufferGeometry();
+    newGeometry.setAttribute('position', new THREE.Float32BufferAttribute(newPositions, 3));
+    newGeometry.setIndex(newIndices);
+    newGeometry.computeVertexNormals();
+
+    // Apply to mesh
+    mesh.geometry.dispose();
+    mesh.geometry = newGeometry;
+
+    // Create undo command
+    const command = new DeleteVerticesCommand(objectId, oldGeometry, newGeometry);
+    executeCommand(command);
+
+    // Clear selection
+    clearEditSelection();
+
+    console.log('[Delete] Deleted', vertices.size, 'vertices');
+  };
+
+  // Helper: Delete selected faces
+  const handleDeleteFaces = (objectId: string, faces: Set<number>) => {
+    const mesh = meshRegistry.getMesh(objectId);
+    if (!mesh || !mesh.geometry) return;
+
+    const oldGeometry = mesh.geometry.clone();
+    const indices = mesh.geometry.index;
+
+    if (!indices) {
+      console.warn('[Delete] Geometry must be indexed');
+      return;
+    }
+
+    // Build new index list (excluding selected faces)
+    const faceArray = Array.from(faces);
+    const newIndices: number[] = [];
+
+    for (let i = 0; i < indices.count / 3; i++) {
+      if (!faceArray.includes(i)) {
+        // Keep this face
+        newIndices.push(
+          indices.array[i * 3],
+          indices.array[i * 3 + 1],
+          indices.array[i * 3 + 2]
+        );
+      }
+    }
+
+    // Create new geometry
+    const newGeometry = mesh.geometry.clone();
+    newGeometry.setIndex(newIndices);
+    newGeometry.computeVertexNormals();
+
+    // Apply to mesh
+    mesh.geometry.dispose();
+    mesh.geometry = newGeometry;
+
+    // Create undo command
+    const command = new DeleteVerticesCommand(objectId, oldGeometry, newGeometry);
+    executeCommand(command);
+
+    // Clear selection
+    clearEditSelection();
+
+    console.log('[Delete] Deleted', faces.size, 'faces');
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -59,17 +183,15 @@ export function useKeyboardShortcuts() {
       else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
 
-        if (isEditMode) {
+        if (isEditMode && editingObjectId) {
           // In edit mode, delete selected elements
           if (selectionMode === 'vertex' && selectedVertices.size > 0) {
-            console.log('Delete vertices not yet implemented');
-            // TODO: Implement vertex deletion
+            handleDeleteVertices(editingObjectId, selectedVertices);
           } else if (selectionMode === 'edge' && selectedEdges.size > 0) {
-            console.log('Delete edges not yet implemented');
-            // TODO: Implement edge deletion
+            console.log('Delete edges not yet implemented - will delete edge vertices');
+            // TODO: Implement edge deletion (remove edge and affected faces)
           } else if (selectionMode === 'face' && selectedFaces.size > 0) {
-            console.log('Delete faces not yet implemented');
-            // TODO: Implement face deletion
+            handleDeleteFaces(editingObjectId, selectedFaces);
           }
         } else if (selectedIds.length > 0) {
           // Normal mode, delete objects

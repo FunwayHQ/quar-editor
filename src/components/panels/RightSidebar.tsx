@@ -5,19 +5,25 @@
  */
 
 import React, { useState } from 'react';
-import { Settings, Palette, Cloud, Edit3, Layers3, Layers } from 'lucide-react';
+import { Settings, Palette, Cloud, Edit3, Layers3, Layers, Spline, Combine } from 'lucide-react';
 import { PropertiesPanel } from './PropertiesPanel';
 import { MaterialPanel } from './MaterialPanel';
 import { EnvironmentPanel } from './EnvironmentPanel';
 import { EditModePanel } from './EditModePanel';
 import { ShapeKeysPanel } from './ShapeKeysPanel';
 import { ModifierPanel } from './ModifierPanel';
+import { MeshOperationsPanel } from './MeshOperationsPanel';
+import { BooleanOperationsPanel } from './BooleanOperationsPanel';
 import { useEditModeStore } from '../../stores/editModeStore';
+import { useCurveStore } from '../../stores/curveStore';
+import { useObjectsStore } from '../../stores/objectsStore';
 
-type Tab = 'properties' | 'material' | 'environment' | 'edit' | 'shapekeys' | 'modifiers';
+type Tab = 'properties' | 'material' | 'environment' | 'edit' | 'shapekeys' | 'modifiers' | 'curves' | 'boolean';
 
 export function RightSidebar() {
   const { isEditMode } = useEditModeStore();
+  const selectedCurveIds = useCurveStore((state) => state.selectedCurveIds);
+  const selectedObjectIds = useObjectsStore((state) => state.selectedIds);
   const [activeTab, setActiveTab] = useState<Tab>('properties');
 
   // Auto-switch to edit tab when entering edit mode
@@ -30,6 +36,22 @@ export function RightSidebar() {
       }
     }
   }, [isEditMode]);
+
+  // Auto-switch to boolean tab when exactly 2 objects selected
+  React.useEffect(() => {
+    if (selectedObjectIds.length === 2 && !isEditMode) {
+      setActiveTab('boolean');
+    } else if (selectedObjectIds.length !== 2 && activeTab === 'boolean') {
+      setActiveTab('properties');
+    }
+  }, [selectedObjectIds.length, isEditMode]);
+
+  // Auto-switch to curves tab when curve is selected
+  React.useEffect(() => {
+    if (selectedCurveIds.length > 0 && !isEditMode && selectedObjectIds.length === 0) {
+      setActiveTab('curves');
+    }
+  }, [selectedCurveIds.length, selectedObjectIds.length, isEditMode]);
 
   return (
     <div className="w-80 h-full bg-[#18181B]/80 backdrop-blur-md border-l border-[#27272A] flex flex-col">
@@ -107,6 +129,31 @@ export function RightSidebar() {
             <Layers className="w-4 h-4" />
             <span>Modifiers</span>
           </button>
+          <button
+            onClick={() => setActiveTab('curves')}
+            disabled={isEditMode}
+            className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
+              activeTab === 'curves'
+                ? 'bg-[#7C3AED] text-white'
+                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+            } ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <Spline className="w-4 h-4" />
+            <span>Curves</span>
+          </button>
+          {selectedObjectIds.length === 2 && !isEditMode && (
+            <button
+              onClick={() => setActiveTab('boolean')}
+              className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
+                activeTab === 'boolean'
+                  ? 'bg-[#7C3AED] text-white'
+                  : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+              }`}
+            >
+              <Combine className="w-4 h-4" />
+              <span>Boolean</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -118,6 +165,8 @@ export function RightSidebar() {
         {activeTab === 'environment' && <EnvironmentPanel />}
         {activeTab === 'shapekeys' && <ShapeKeysPanel />}
         {activeTab === 'modifiers' && <ModifierPanel />}
+        {activeTab === 'curves' && <MeshOperationsPanel />}
+        {activeTab === 'boolean' && <BooleanOperationsPanel />}
       </div>
     </div>
   );

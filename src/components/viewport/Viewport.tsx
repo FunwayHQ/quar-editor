@@ -14,6 +14,7 @@ import { useSceneStore } from '@/stores/sceneStore';
 import { useObjectsStore } from '@/stores/objectsStore';
 import { useEnvironmentStore } from '@/stores/environmentStore';
 import { useEditModeStore } from '@/stores/editModeStore';
+import { useCurveStore } from '@/stores/curveStore';
 import { ViewportToolbar } from './ViewportToolbar';
 import { StatsPanel, FPSCounter } from './StatsPanel';
 import { ObjectCreationToolbar } from './ObjectCreationToolbar';
@@ -22,6 +23,8 @@ import { TransformGizmo } from './TransformGizmo';
 import { EditTransformControls } from './EditTransformControls';
 import { EditModeToolbar } from './EditModeToolbar';
 import { KnifeToolVisuals } from './KnifeToolVisuals';
+import { CurveRenderer } from './CurveRenderer';
+import { PreviewMeshRenderer } from './PreviewMeshRenderer';
 import { useCameraPresets } from './CameraPresets';
 import * as THREE from 'three';
 import { useEffect } from 'react';
@@ -35,6 +38,13 @@ function Scene() {
   const clearSelection = useObjectsStore((state) => state.clearSelection);
   const transformMode = useObjectsStore((state) => state.transformMode);
   const { isEditMode } = useEditModeStore();
+  const clearCurveSelection = useCurveStore((state) => state.clearSelection);
+
+  // Handle object selection - also clear curve selection
+  const handleObjectSelect = (id: string, multiSelect: boolean) => {
+    clearCurveSelection();
+    toggleSelection(id, multiSelect);
+  };
 
   // Environment settings
   const {
@@ -70,6 +80,7 @@ function Scene() {
   // Handle background click to deselect
   const handleBackgroundClick = () => {
     clearSelection();
+    clearCurveSelection();
   };
 
   return (
@@ -124,9 +135,15 @@ function Scene() {
           key={object.id}
           object={object}
           isSelected={selectedIds.includes(object.id)}
-          onSelect={toggleSelection}
+          onSelect={handleObjectSelect}
         />
       ))}
+
+      {/* 2D Curves (SVG imports) */}
+      <CurveRenderer />
+
+      {/* Preview Mesh (for curve operations) */}
+      <PreviewMeshRenderer />
 
       {/* Background plane for deselection */}
       <mesh onClick={handleBackgroundClick} visible={false}>
@@ -156,12 +173,14 @@ export function Viewport() {
   const { isEditMode } = useEditModeStore();
   const { clearSelection } = useObjectsStore();
   const { clearSelection: clearEditSelection } = useEditModeStore();
+  const { clearSelection: clearCurveSelection } = useCurveStore();
 
   const handleBackgroundClick = () => {
     if (isEditMode) {
       clearEditSelection();
     } else {
       clearSelection();
+      clearCurveSelection();
     }
   };
 

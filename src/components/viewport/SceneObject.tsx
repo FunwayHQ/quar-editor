@@ -367,6 +367,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
   // Handle click
   const handleClick = (event: THREE.Event) => {
+    console.log('[SceneObject] Clicked:', object.name, 'Type:', object.type);
     event.stopPropagation();
 
     // Priority 1: Knife tool (if active in edit mode)
@@ -554,6 +555,40 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
   }
 
+  // Create bounding box for easier selection
+  const boundingBox = useMemo(() => {
+    if (!geometry) {
+      console.log('[SceneObject] No geometry for bounding box:', object.name);
+      return null;
+    }
+
+    geometry.computeBoundingBox();
+    if (!geometry.boundingBox) {
+      console.log('[SceneObject] No bounding box computed:', object.name);
+      return null;
+    }
+
+    const box = geometry.boundingBox;
+    const center = new THREE.Vector3();
+    const size = new THREE.Vector3();
+    box.getCenter(center);
+    box.getSize(size);
+
+    console.log('[SceneObject] Bounding box for', object.name, '- Size:', size.toArray(), 'Center:', center.toArray());
+
+    // Expand slightly for easier clicking (10% larger)
+    const boxGeo = new THREE.BoxGeometry(
+      Math.max(size.x * 1.1, 0.2),
+      Math.max(size.y * 1.1, 0.2),
+      Math.max(size.z * 1.1, 0.2)
+    );
+
+    // Center the box geometry
+    boxGeo.translate(center.x, center.y, center.z);
+
+    return boxGeo;
+  }, [geometry, object.name]);
+
   // Render meshes
   return (
     <>
@@ -570,6 +605,20 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
         castShadow
         receiveShadow
       />
+
+      {/* Invisible bounding box for easier selection */}
+      {!isEditMode && boundingBox && (
+        <mesh
+          geometry={boundingBox}
+          position={object.position}
+          rotation={object.rotation}
+          scale={object.scale}
+          onClick={handleClick}
+          visible={false}
+        >
+          <meshBasicMaterial transparent opacity={0} />
+        </mesh>
+      )}
 
       {/* Knife tool: Show edges as wireframe overlay */}
       {isKnifeActive && isEditMode && editingObjectId === object.id && meshRef.current && (

@@ -13,6 +13,7 @@ import { useEditModeStore } from '../../stores/editModeStore';
 import { useObjectsStore } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
+import { MoveVerticesCommand } from '../../lib/commands/EditModeCommands';
 
 interface EditTransformControlsProps {
   mode: 'translate' | 'rotate' | 'scale';
@@ -241,17 +242,42 @@ export function EditTransformControls({ mode }: EditTransformControlsProps) {
 
   // Handle transform end
   const handleDragEnd = () => {
-    if (!isDraggingRef.current) return;
+    if (!isDraggingRef.current || !editingObject) return;
 
-    // TODO: Create and execute EditVerticesCommand for undo/redo
-    // This will be implemented when we create the command system for edit operations
+    // Capture current positions after transform
+    const meshObject = meshRegistry.getMesh(editingObject.id);
+    if (!meshObject || !meshObject.geometry) return;
+
+    const positions = meshObject.geometry.attributes.position;
+    const newPositions = new Map<number, THREE.Vector3>();
+
+    // Store new positions for undo/redo
+    initialPositionsRef.current.forEach((oldPos, vertexIndex) => {
+      const newPos = new THREE.Vector3(
+        positions.getX(vertexIndex),
+        positions.getY(vertexIndex),
+        positions.getZ(vertexIndex)
+      );
+      newPositions.set(vertexIndex, newPos);
+    });
+
+    // Create and execute undo/redo command
+    const command = new MoveVerticesCommand(
+      editingObject.id,
+      Array.from(initialPositionsRef.current.keys()),
+      initialPositionsRef.current,
+      newPositions
+    );
+    executeCommand(command);
+
+    console.log('[EditTransformControls] Created undo command for', initialPositionsRef.current.size, 'vertices');
 
     isDraggingRef.current = false;
     initialPositionsRef.current.clear();
     initialTransformRef.current = null;
 
     // Update helper position to new selection center
-    if (helperRef.current && editingObject && hasSelection()) {
+    if (helperRef.current && hasSelection()) {
       const newCenter = calculateSelectionCenter();
       helperRef.current.position.copy(newCenter);
       helperRef.current.rotation.set(0, 0, 0);
