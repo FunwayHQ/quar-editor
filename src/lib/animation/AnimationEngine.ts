@@ -12,6 +12,10 @@ import { useMorphTargetStore } from '../../stores/morphTargetStore';
 
 /**
  * Animation Engine - Handles playback and property updates
+ *
+ * Sprint 9: Now supports hierarchical animations
+ * - Keyframes are applied in local space by default (relative to parent)
+ * - This makes child animations work correctly with parent transforms
  */
 export class AnimationEngine {
   private rafId: number | null = null;
@@ -129,6 +133,9 @@ export class AnimationEngine {
 
   /**
    * Build property update object for a track value
+   *
+   * Note: All values are applied in local space (stored in object.position/rotation/scale)
+   * This makes animations work correctly with hierarchies - child animations are relative to parent.
    */
   private buildPropertyUpdate(track: AnimationTrack, value: any, targetUpdates: any): void {
     // Handle nested property paths

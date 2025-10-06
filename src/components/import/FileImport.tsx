@@ -99,13 +99,14 @@ export function FileImport() {
         (gltf) => {
           console.log('[FileImport] GLTF loaded:', gltf);
 
-          // Traverse the scene and create objects
+          // Map Three.js objects to SceneObject IDs (for hierarchy)
+          const threeToSceneId = new Map<THREE.Object3D, string>();
+          const generateName = useObjectsStore.getState().generateName;
+          const now = Date.now();
+
+          // PASS 1: Create all objects and build ID map
           gltf.scene.traverse((child) => {
             if (child instanceof THREE.Mesh) {
-              // Create a new SceneObject from the mesh
-              const generateName = useObjectsStore.getState().generateName;
-              const now = Date.now();
-
               // Extract geometry data
               const geometry = child.geometry;
               const positionAttr = geometry.getAttribute('position');
@@ -120,8 +121,10 @@ export function FileImport() {
                 indices: indexAttr ? Array.from(indexAttr.array) : undefined,
               };
 
+              const objectId = `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
               const object: SceneObject = {
-                id: `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                id: objectId,
                 name: child.name || generateName('imported'),
                 type: 'imported',
                 visible: true,
@@ -129,12 +132,15 @@ export function FileImport() {
                 position: [child.position.x, child.position.y, child.position.z],
                 rotation: [child.rotation.x, child.rotation.y, child.rotation.z],
                 scale: [child.scale.x, child.scale.y, child.scale.z],
-                parentId: null,
-                children: [],
+                parentId: null, // Will be set in pass 2
+                children: [],   // Will be populated by setParent
                 importedGeometry,
                 createdAt: now,
                 modifiedAt: now,
               };
+
+              // Map Three.js object to SceneObject ID
+              threeToSceneId.set(child, objectId);
 
               // Create object with command
               const command = new CreateObjectCommand(object);
@@ -169,11 +175,36 @@ export function FileImport() {
                 };
 
                 addMaterial(material);
-                assignMaterialToObject(object.id, materialId);
+                assignMaterialToObject(objectId, materialId);
               }
             }
           });
 
+          // PASS 2: Set up parent-child relationships
+          gltf.scene.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              const childId = threeToSceneId.get(child);
+              if (!childId) return;
+
+              // Check if this mesh has a parent that's also a mesh (part of the hierarchy)
+              let parentThreeObj = child.parent;
+              while (parentThreeObj && parentThreeObj !== gltf.scene) {
+                if (parentThreeObj instanceof THREE.Mesh) {
+                  const parentId = threeToSceneId.get(parentThreeObj);
+                  if (parentId) {
+                    // Set parent relationship
+                    const objectsStore = useObjectsStore.getState();
+                    objectsStore.setParent(childId, parentId);
+                    console.log(`[FileImport] Set parent: ${child.name} → ${parentThreeObj.name}`);
+                    break;
+                  }
+                }
+                parentThreeObj = parentThreeObj.parent;
+              }
+            }
+          });
+
+          console.log('[FileImport] GLTF import complete with hierarchy preserved');
           URL.revokeObjectURL(url);
           resolve(gltf);
         },
@@ -199,12 +230,14 @@ export function FileImport() {
         (fbx) => {
           console.log('[FileImport] FBX loaded:', fbx);
 
-          // Traverse and create objects
+          // Map Three.js objects to SceneObject IDs (for hierarchy)
+          const threeToSceneId = new Map<THREE.Object3D, string>();
+          const generateName = useObjectsStore.getState().generateName;
+          const now = Date.now();
+
+          // PASS 1: Create all objects and build ID map
           fbx.traverse((child) => {
             if (child instanceof THREE.Mesh) {
-              const generateName = useObjectsStore.getState().generateName;
-              const now = Date.now();
-
               // Extract geometry
               const geometry = child.geometry;
               const positionAttr = geometry.getAttribute('position');
@@ -219,8 +252,10 @@ export function FileImport() {
                 indices: indexAttr ? Array.from(indexAttr.array) : undefined,
               };
 
+              const objectId = `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
               const object: SceneObject = {
-                id: `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                id: objectId,
                 name: child.name || generateName('imported'),
                 type: 'imported',
                 visible: true,
@@ -228,12 +263,15 @@ export function FileImport() {
                 position: [child.position.x, child.position.y, child.position.z],
                 rotation: [child.rotation.x, child.rotation.y, child.rotation.z],
                 scale: [child.scale.x, child.scale.y, child.scale.z],
-                parentId: null,
-                children: [],
+                parentId: null, // Will be set in pass 2
+                children: [],   // Will be populated by setParent
                 importedGeometry,
                 createdAt: now,
                 modifiedAt: now,
               };
+
+              // Map Three.js object to SceneObject ID
+              threeToSceneId.set(child, objectId);
 
               const command = new CreateObjectCommand(object);
               executeCommand(command);
@@ -268,11 +306,36 @@ export function FileImport() {
                 };
 
                 addMaterial(material);
-                assignMaterialToObject(object.id, materialId);
+                assignMaterialToObject(objectId, materialId);
               }
             }
           });
 
+          // PASS 2: Set up parent-child relationships
+          fbx.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              const childId = threeToSceneId.get(child);
+              if (!childId) return;
+
+              // Check if this mesh has a parent that's also a mesh
+              let parentThreeObj = child.parent;
+              while (parentThreeObj && parentThreeObj !== fbx) {
+                if (parentThreeObj instanceof THREE.Mesh) {
+                  const parentId = threeToSceneId.get(parentThreeObj);
+                  if (parentId) {
+                    // Set parent relationship
+                    const objectsStore = useObjectsStore.getState();
+                    objectsStore.setParent(childId, parentId);
+                    console.log(`[FileImport] FBX Set parent: ${child.name} → ${parentThreeObj.name}`);
+                    break;
+                  }
+                }
+                parentThreeObj = parentThreeObj.parent;
+              }
+            }
+          });
+
+          console.log('[FileImport] FBX import complete with hierarchy preserved');
           URL.revokeObjectURL(url);
           resolve(fbx);
         },

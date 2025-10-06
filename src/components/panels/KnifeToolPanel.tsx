@@ -14,10 +14,16 @@ import { meshRegistry } from '../../lib/mesh/MeshRegistry';
 import { projectCutOntoFace } from '../../lib/geometry/IntersectionUtils';
 import { MeshOperations } from '../../lib/mesh/MeshOperations';
 import { KnifeCutCommand } from '../../lib/commands/KnifeCutCommand';
+import { findQuadPair } from '../../lib/geometry/QuadDetection';
+import { cutQuadFace } from '../../lib/geometry/QuadKnifeCut';
+import { useObjectsStore } from '../../stores/objectsStore';
+import * as THREE from 'three';
 
 export function KnifeToolPanel() {
   const {
     isActive,
+    cutMode,
+    setCutMode,
     drawingPath,
     intersectionPoints,
     targetFaceIndex,
@@ -51,51 +57,142 @@ export function KnifeToolPanel() {
       return;
     }
 
-    // Use projection-based cutting
+    // Store original geometry for undo
+    const originalGeo = mesh.geometry.clone();
+
+    // Sprint Y: Quad-aware cutting algorithm
     try {
-      // Project cut onto face and find edge intersections
-      const edgeIntersections = projectCutOntoFace(
-        drawingPath[0],
-        drawingPath[1],
-        targetFaceIndex,
-        mesh.geometry,
-        mesh
-      );
+      if (cutMode === 'quad') {
+        // Quad mode: Use specialized algorithm that creates 2 quads (no diagonals)
+        const quadPair = findQuadPair(targetFaceIndex, mesh.geometry);
 
-      if (edgeIntersections.length !== 2) {
-        console.warn('[KnifeTool] Cut must cross exactly 2 edges of the face. Found:', edgeIntersections.length);
-        alert(`Cut didn't cross the face properly. Try clicking opposite edges of the face.\nFound ${edgeIntersections.length} edge crossings, need 2.`);
-        return;
+        if (quadPair !== null) {
+          console.log(`[KnifeTool] Quad mode: Cutting quad (faces ${targetFaceIndex} + ${quadPair}) into 2 quads`);
+
+          // Project cut to find edge intersections
+          const edgeIntersections = projectCutOntoFace(
+            drawingPath[0],
+            drawingPath[1],
+            targetFaceIndex,
+            mesh.geometry,
+            mesh
+          );
+
+          if (edgeIntersections.length !== 2) {
+            alert(`Cut must cross 2 edges. Found ${edgeIntersections.length}.`);
+            return;
+          }
+
+          // Convert to local space
+          const cutPointsLocal = edgeIntersections.map(ei => {
+            const localPoint = ei.point.clone();
+            mesh.worldToLocal(localPoint);
+            return {
+              point: localPoint,
+              faceIndex: targetFaceIndex,
+              edgeIndex: ei.edgeIndex,
+            };
+          });
+
+          // Use quad cut algorithm - creates 2 quads (4 triangles) preserving quad topology
+          let result;
+          try {
+            result = cutQuadFace(mesh.geometry, targetFaceIndex, cutPointsLocal);
+          } catch (error) {
+            console.error('[KnifeTool] Quad cut failed, falling back to triangle mode:', error);
+            alert('Quad cut failed (invalid topology). Using triangle mode instead.');
+            // Fall back to triangle cut below
+            throw error; // Re-throw to trigger triangle mode fallback
+          }
+
+          // Update geometry
+          mesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(result.newPositions, 3));
+          mesh.geometry.setIndex(new THREE.Uint32BufferAttribute(result.newIndices, 1));
+          mesh.geometry.computeVertexNormals();
+          mesh.geometry.computeBoundingBox();
+          mesh.geometry.computeBoundingSphere();
+
+          // Sprint Y: Mark cut edge as feature edge (always visible)
+          if (!mesh.geometry.userData) {
+            mesh.geometry.userData = {};
+          }
+          if (!mesh.geometry.userData.featureEdges) {
+            mesh.geometry.userData.featureEdges = [];
+          }
+          mesh.geometry.userData.featureEdges.push(result.featureEdge);
+
+          console.log('[KnifeTool] Quad cut complete - 1 quad → 2 quads, cut edge marked as feature:', result.featureEdge);
+        } else {
+          console.warn('[KnifeTool] No quad pair - falling back to triangle cut');
+          // Fall through to triangle mode
+        }
+      } else {
+        // Triangle mode: Standard knife cut
+        const edgeIntersections = projectCutOntoFace(
+          drawingPath[0],
+          drawingPath[1],
+          targetFaceIndex,
+          mesh.geometry,
+          mesh
+        );
+
+        if (edgeIntersections.length !== 2) {
+          alert(`Cut must cross 2 edges. Found ${edgeIntersections.length}.`);
+          return;
+        }
+
+        const cutIntersections = edgeIntersections.map(ei => {
+          const localPoint = ei.point.clone();
+          mesh.worldToLocal(localPoint);
+          return {
+            point: localPoint,
+            faceIndex: targetFaceIndex,
+            edgeIndex: ei.edgeIndex,
+          };
+        });
+
+        MeshOperations.knifeCut(mesh.geometry, cutIntersections);
       }
-
-      console.log('[KnifeTool] Applying surface-projected cut...');
-      console.log('[KnifeTool] Cut intersects edges:', edgeIntersections.map(e => e.edgeIndex));
-
-      // Apply the cut directly using edge intersections
-      // Convert points from world space to local space
-      const cutIntersections = edgeIntersections.map(ei => {
-        const localPoint = ei.point.clone();
-        mesh.worldToLocal(localPoint);
-        return {
-          point: localPoint,
-          faceIndex: targetFaceIndex,
-          edgeIndex: ei.edgeIndex,
-        };
-      });
-
-      console.log('[KnifeTool] Cut points in local space:', cutIntersections.map(c => c.point.toArray()));
-
-      // Create a simple command that stores before/after
-      const originalGeo = mesh.geometry.clone();
-
-      MeshOperations.knifeCut(mesh.geometry, cutIntersections);
 
       // Force update
       mesh.geometry.attributes.position.needsUpdate = true;
       if (mesh.geometry.index) mesh.geometry.index.needsUpdate = true;
       if (mesh.geometry.attributes.normal) mesh.geometry.attributes.normal.needsUpdate = true;
 
-      console.log('[KnifeTool] Knife cut applied successfully');
+      // Sprint Y: Save geometry to store including feature edges metadata
+      const geometry = mesh.geometry;
+      const pos = geometry.attributes.position;
+      const normals = geometry.attributes.normal;
+      const uvs = geometry.attributes.uv;
+      const idx = geometry.index;
+
+      const geometryData = {
+        data: {
+          attributes: {
+            position: {
+              array: Array.from(pos.array),
+              itemSize: pos.itemSize,
+            },
+            normal: normals ? {
+              array: Array.from(normals.array),
+              itemSize: normals.itemSize,
+            } : undefined,
+            uv: uvs ? {
+              array: Array.from(uvs.array),
+              itemSize: uvs.itemSize,
+            } : undefined,
+          },
+          index: idx ? {
+            array: Array.from(idx.array),
+          } : undefined,
+          // Sprint Y: Include feature edges metadata
+          userData: geometry.userData || {},
+        },
+      };
+
+      useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
+
+      console.log('[KnifeTool] Knife cut applied and saved to store');
 
       // Clear the path
       confirmCut();
@@ -138,10 +235,42 @@ export function KnifeToolPanel() {
         </div>
       </div>
 
+      {/* Sprint Y: Cut Mode Toggle */}
+      <div className="px-3 pt-3 pb-2 border-b border-[#27272A]">
+        <label className="block text-xs text-[#A1A1AA] mb-2">Cut Mode</label>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setCutMode('quad')}
+            className={`flex-1 px-3 py-1.5 text-xs rounded transition-colors ${
+              cutMode === 'quad'
+                ? 'bg-[#7C3AED] text-white'
+                : 'bg-[#27272A] text-[#FAFAFA] hover:bg-[#3F3F46]'
+            }`}
+          >
+            Quad
+          </button>
+          <button
+            onClick={() => setCutMode('triangle')}
+            className={`flex-1 px-3 py-1.5 text-xs rounded transition-colors ${
+              cutMode === 'triangle'
+                ? 'bg-[#7C3AED] text-white'
+                : 'bg-[#27272A] text-[#FAFAFA] hover:bg-[#3F3F46]'
+            }`}
+          >
+            Triangle
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-[#71717A]">
+          {cutMode === 'quad'
+            ? 'Cut will affect whole quad face (both triangles)'
+            : 'Cut will affect single triangle only'}
+        </p>
+      </div>
+
       {/* Instructions */}
       <div className="p-3 space-y-2">
         <div className="text-xs text-[#A1A1AA]">
-          <p className="mb-2">Click two points on the SAME FACE to split it</p>
+          <p className="mb-2">Click two points on the SAME {cutMode === 'quad' ? 'QUAD' : 'TRIANGLE'} to split it</p>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>

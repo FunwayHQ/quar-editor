@@ -30,7 +30,15 @@ import * as THREE from 'three';
 import { useEffect } from 'react';
 
 function Scene() {
-  const { showGrid, showAxes } = useSceneStore();
+  const {
+    showGrid,
+    showAxes,
+    gridSize,
+    gridDivisions,
+    gridUnitSize,
+    gridColor,
+    gridOpacity,
+  } = useSceneStore();
   const cameraPreset = useSceneStore((state) => state.cameraPreset);
   const objects = useObjectsStore((state) => state.getAllObjects());
   const selectedIds = useObjectsStore((state) => state.selectedIds);
@@ -109,9 +117,35 @@ function Scene() {
         <fogExp2 attach="fog" args={[fogColor, fogDensity]} />
       )}
 
-      {/* Grid */}
+      {/* Grid - Sprint Y: Professional grid with real units */}
       {showGrid && (
-        <primitive object={new THREE.GridHelper(10, 10, '#7C3AED', '#7C3AED')} />
+        <>
+          {/* Grid lines */}
+          <primitive
+            object={new THREE.GridHelper(
+              gridSize * gridUnitSize,  // Total size in meters
+              gridDivisions,            // Number of divisions
+              gridColor,                // Center line color
+              gridColor                 // Grid line color
+            )}
+          />
+
+          {/* Semi-transparent grid plane for better depth perception */}
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, -0.001, 0]}
+            receiveShadow={false}
+          >
+            <planeGeometry args={[gridSize * gridUnitSize, gridSize * gridUnitSize]} />
+            <meshBasicMaterial
+              color={gridColor}
+              transparent
+              opacity={gridOpacity}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </>
       )}
 
       {/* Axes - X (Red), Y (Green), Z (Blue) */}
@@ -129,15 +163,17 @@ function Scene() {
       <ambientLight intensity={0.3} />
       <directionalLight position={[10, 10, 5]} intensity={0.3} castShadow shadow-mapSize={[2048, 2048]} />
 
-      {/* Scene Objects (including lights) */}
-      {objects.map((object) => (
-        <SceneObject
-          key={object.id}
-          object={object}
-          isSelected={selectedIds.includes(object.id)}
-          onSelect={handleObjectSelect}
-        />
-      ))}
+      {/* Scene Objects (including lights) - Only render root objects, children are rendered recursively */}
+      {objects
+        .filter((object) => object.parentId === null)
+        .map((object) => (
+          <SceneObject
+            key={object.id}
+            object={object}
+            isSelected={selectedIds.includes(object.id)}
+            onSelect={handleObjectSelect}
+          />
+        ))}
 
       {/* 2D Curves (SVG imports) */}
       <CurveRenderer />

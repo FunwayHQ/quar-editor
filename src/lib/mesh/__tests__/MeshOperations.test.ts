@@ -189,13 +189,30 @@ describe('MeshOperations', () => {
   });
 
   describe('subdivideFaces', () => {
-    it('logs not implemented message', () => {
+    it('subdivides selected faces', () => {
+      const selectedFaces = new Set([0]); // First triangle
+      const originalVertexCount = geometry.attributes.position.count;
+
+      MeshOperations.subdivideFaces(geometry, selectedFaces, 1);
+
+      // Should have added at least one new vertex (face center)
+      const newVertexCount = geometry.attributes.position.count;
+      expect(newVertexCount).toBeGreaterThan(originalVertexCount);
+
+      // Should have increased triangle count (1 face -> 3 faces)
+      expect(geometry.index!.count).toBeGreaterThan(0);
+    });
+
+    it('preserves non-selected faces', () => {
+      const geometry2 = new THREE.BoxGeometry(1, 1, 1);
+      const originalIndexCount = geometry2.index!.count;
+
+      // Only subdivide face 0
       const selectedFaces = new Set([0]);
-      const consoleSpy = vi.spyOn(console, 'log');
+      MeshOperations.subdivideFaces(geometry2, selectedFaces, 1);
 
-      MeshOperations.subdivideFaces(geometry, selectedFaces, 2);
-
-      expect(consoleSpy).toHaveBeenCalledWith('Subdivide faces not yet implemented');
+      // Index count should increase (more triangles)
+      expect(geometry2.index!.count).toBeGreaterThan(originalIndexCount);
     });
   });
 

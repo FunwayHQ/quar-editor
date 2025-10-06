@@ -14,6 +14,7 @@ import { useObjectsStore } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
 import { MoveVerticesCommand } from '../../lib/commands/EditModeCommands';
+import { findAllMergedVertices } from '../../lib/geometry/VertexMerging';
 
 interface EditTransformControlsProps {
   mode: 'translate' | 'rotate' | 'scale';
@@ -27,6 +28,7 @@ export function EditTransformControls({ mode }: EditTransformControlsProps) {
     selectedEdges,
     selectedFaces,
     selectionMode,
+    mergedVertexMode,
     hasSelection
   } = useEditModeStore();
 
@@ -132,7 +134,14 @@ export function EditTransformControls({ mode }: EditTransformControlsProps) {
     initialPositionsRef.current.clear();
 
     if (selectionMode === 'vertex') {
-      selectedVertices.forEach(index => {
+      // Sprint Y: Expand selection to include merged vertices if enabled
+      const verticesToTransform = mergedVertexMode
+        ? findAllMergedVertices(selectedVertices, meshObject.geometry)
+        : selectedVertices;
+
+      console.log(`[EditTransform] Vertex mode - selected: ${selectedVertices.size}, with merged: ${verticesToTransform.size}`);
+
+      verticesToTransform.forEach(index => {
         const pos = new THREE.Vector3(
           positions.getX(index),
           positions.getY(index),
@@ -234,10 +243,58 @@ export function EditTransformControls({ mode }: EditTransformControlsProps) {
       positions.setXYZ(vertexIndex, worldPos.x, worldPos.y, worldPos.z);
     });
 
+    // Sprint Y: CRITICAL FIX - Mark geometry as updated
     positions.needsUpdate = true;
     meshObject.geometry.computeVertexNormals();
     meshObject.geometry.computeBoundingBox();
     meshObject.geometry.computeBoundingSphere();
+
+    // Force mesh update
+    meshObject.geometry.attributes.position.needsUpdate = true;
+    if (meshObject.geometry.attributes.normal) {
+      meshObject.geometry.attributes.normal.needsUpdate = true;
+    }
+  };
+
+  // Helper: Save geometry back to object store
+  const saveGeometryToStore = (meshObject: THREE.Mesh, objectId: string) => {
+    const geometry = meshObject.geometry;
+    const positions = geometry.attributes.position;
+    const normals = geometry.attributes.normal;
+    const uvs = geometry.attributes.uv;
+    const index = geometry.index;
+
+    // Serialize geometry data
+    const geometryData = {
+      data: {
+        attributes: {
+          position: {
+            array: Array.from(positions.array),
+            itemSize: positions.itemSize,
+          },
+          normal: normals
+            ? {
+                array: Array.from(normals.array),
+                itemSize: normals.itemSize,
+              }
+            : undefined,
+          uv: uvs
+            ? {
+                array: Array.from(uvs.array),
+                itemSize: uvs.itemSize,
+              }
+            : undefined,
+        },
+        index: index
+          ? {
+              array: Array.from(index.array),
+            }
+          : undefined,
+      },
+    };
+
+    // Update object in store
+    useObjectsStore.getState().updateObject(objectId, { geometry: geometryData });
   };
 
   // Handle transform end
@@ -271,6 +328,10 @@ export function EditTransformControls({ mode }: EditTransformControlsProps) {
     executeCommand(command);
 
     console.log('[EditTransformControls] Created undo command for', initialPositionsRef.current.size, 'vertices');
+
+    // Sprint Y: CRITICAL FIX - Save updated geometry to object store
+    // This ensures changes persist across re-renders
+    saveGeometryToStore(meshObject, editingObject.id);
 
     isDraggingRef.current = false;
     initialPositionsRef.current.clear();

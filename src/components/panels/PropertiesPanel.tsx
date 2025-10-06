@@ -35,6 +35,19 @@ function Vector3Input({ label, value, onChange, step = 0.1 }: Vector3InputProps)
     onChange(localValue);
   };
 
+  // Sprint Y: Add Enter key support for committing changes
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      onChange(localValue);
+      (e.target as HTMLInputElement).blur(); // Blur to show updated value
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setLocalValue(value); // Revert to original
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
   const labels = ['X', 'Y', 'Z'];
   const colors = ['#EF4444', '#10B981', '#3B82F6']; // Red, Green, Blue
 
@@ -55,6 +68,7 @@ function Vector3Input({ label, value, onChange, step = 0.1 }: Vector3InputProps)
               value={val.toFixed(3)}
               onChange={(e) => handleChange(index, e.target.value)}
               onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
               step={step}
               className="w-full bg-[#0A0A0B] border border-[#27272A] rounded px-2 pl-6 py-1 text-sm text-[#FAFAFA] outline-none focus:border-[#7C3AED] transition-colors"
             />

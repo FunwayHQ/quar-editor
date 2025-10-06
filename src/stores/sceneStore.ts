@@ -39,12 +39,21 @@ export interface SceneState {
   showStats: boolean;
   setShowStats: (show: boolean) => void;
 
-  // Grid settings
-  gridSize: number;
+  // Grid settings (Sprint Y: Professional grid system)
+  gridSize: number;           // Total size in meters (e.g., 20 = 20x20 meters)
   setGridSize: (size: number) => void;
 
-  gridDivisions: number;
+  gridDivisions: number;      // Number of divisions (e.g., 20 = 20 squares)
   setGridDivisions: (divisions: number) => void;
+
+  gridUnitSize: number;       // Size of one grid square in meters (default: 1.0)
+  setGridUnitSize: (size: number) => void;
+
+  gridColor: string;          // Grid line color
+  setGridColor: (color: string) => void;
+
+  gridOpacity: number;        // Grid plane opacity (0.0 - 1.0)
+  setGridOpacity: (opacity: number) => void;
 
   // Performance stats
   stats: ViewportStats;
@@ -79,12 +88,21 @@ export const useSceneStore = create<SceneState>((set) => ({
   showStats: true,
   setShowStats: (show) => set({ showStats: show }),
 
-  // Grid settings
-  gridSize: 10,
+  // Grid settings (Sprint Y: Professional grid with units)
+  gridSize: 20,                      // 20 meters total
   setGridSize: (size) => set({ gridSize: size }),
 
-  gridDivisions: 10,
+  gridDivisions: 20,                 // 20 divisions
   setGridDivisions: (divisions) => set({ gridDivisions: divisions }),
+
+  gridUnitSize: 1.0,                 // 1 meter per square
+  setGridUnitSize: (size) => set({ gridUnitSize: size }),
+
+  gridColor: '#7C3AED',              // Purple accent
+  setGridColor: (color) => set({ gridColor: color }),
+
+  gridOpacity: 0.15,                 // 15% opacity for plane
+  setGridOpacity: (opacity) => set({ gridOpacity: opacity }),
 
   // Stats
   stats: {

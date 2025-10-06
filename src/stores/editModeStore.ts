@@ -3,16 +3,23 @@
  *
  * Manages polygon editing state (vertex/edge/face selection).
  * Sprint 7: Export System + Polygon Editing MVP
+ * Sprint Y: Smart quad selection
  */
 
 import { create } from 'zustand';
 import { SelectionMode } from '../types/polygon';
+import { findQuadPair } from '../lib/geometry/QuadDetection';
+import { meshRegistry } from '../lib/mesh/MeshRegistry';
 
 interface EditModeStore {
   // Edit mode state
   isEditMode: boolean;
   editingObjectId: string | null;
   selectionMode: SelectionMode;
+
+  // Sprint Y: Merged vertex mode (move connected vertices together)
+  mergedVertexMode: boolean;
+  setMergedVertexMode: (enabled: boolean) => void;
 
   // Selection sets
   selectedVertices: Set<number>;
@@ -61,6 +68,10 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
   isEditMode: false,
   editingObjectId: null,
   selectionMode: 'vertex',
+
+  // Sprint Y: Merged vertex mode (ON by default)
+  mergedVertexMode: true,
+  setMergedVertexMode: (enabled) => set({ mergedVertexMode: enabled }),
 
   selectedVertices: new Set(),
   selectedEdges: new Set(),
@@ -173,12 +184,37 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
     const newSelected = new Set(state.selectedFaces);
 
     if (newSelected.has(index)) {
+      // Deselect: Remove this face and its quad pair
       newSelected.delete(index);
+
+      // Sprint Y: Also remove quad pair if it exists
+      if (state.editingObjectId) {
+        const mesh = meshRegistry.getMesh(state.editingObjectId);
+        if (mesh?.geometry) {
+          const pairIdx = findQuadPair(index, mesh.geometry);
+          if (pairIdx !== null) {
+            newSelected.delete(pairIdx);
+          }
+        }
+      }
     } else {
+      // Select: Add this face
       if (!multiSelect) {
         newSelected.clear();
       }
       newSelected.add(index);
+
+      // Sprint Y: Auto-select quad pair for intuitive quad selection
+      if (state.editingObjectId) {
+        const mesh = meshRegistry.getMesh(state.editingObjectId);
+        if (mesh?.geometry) {
+          const pairIdx = findQuadPair(index, mesh.geometry);
+          if (pairIdx !== null) {
+            newSelected.add(pairIdx);
+            console.log(`[EditMode] Auto-selected quad pair: face ${index} + face ${pairIdx}`);
+          }
+        }
+      }
     }
 
     return { selectedFaces: newSelected };
@@ -187,12 +223,36 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
   selectFace: (index, multiSelect) => set((state) => {
     const newSelected = multiSelect ? new Set(state.selectedFaces) : new Set<number>();
     newSelected.add(index);
+
+    // Sprint Y: Auto-select quad pair
+    if (state.editingObjectId) {
+      const mesh = meshRegistry.getMesh(state.editingObjectId);
+      if (mesh?.geometry) {
+        const pairIdx = findQuadPair(index, mesh.geometry);
+        if (pairIdx !== null) {
+          newSelected.add(pairIdx);
+        }
+      }
+    }
+
     return { selectedFaces: newSelected };
   }),
 
   deselectFace: (index) => set((state) => {
     const newSelected = new Set(state.selectedFaces);
     newSelected.delete(index);
+
+    // Sprint Y: Also deselect quad pair
+    if (state.editingObjectId) {
+      const mesh = meshRegistry.getMesh(state.editingObjectId);
+      if (mesh?.geometry) {
+        const pairIdx = findQuadPair(index, mesh.geometry);
+        if (pairIdx !== null) {
+          newSelected.delete(pairIdx);
+        }
+      }
+    }
+
     return { selectedFaces: newSelected };
   }),
 

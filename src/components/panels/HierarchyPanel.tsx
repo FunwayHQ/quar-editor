@@ -17,12 +17,15 @@ import {
   Edit3,
   Layers,
   Spline,
+  Group,
+  Ungroup,
 } from 'lucide-react';
 import { useObjectsStore, SceneObject } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { useEditModeStore } from '../../stores/editModeStore';
 import { useCurveStore } from '../../stores/curveStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand, UpdateObjectCommand } from '../../lib/commands/ObjectCommands';
+import { GroupObjectsCommand, UngroupObjectsCommand } from '../../lib/commands/GroupCommands';
 import { CurvePanel } from './CurvePanel';
 
 interface ObjectTreeItemProps {
@@ -203,6 +206,32 @@ export function HierarchyPanel() {
     executeCommand(command);
   };
 
+  const handleGroup = () => {
+    if (selectedIds.length < 2) return;
+    const command = new GroupObjectsCommand(selectedIds);
+    executeCommand(command);
+
+    // Clear selection after grouping (group will be created)
+    clearObjectSelection();
+  };
+
+  const handleUngroup = () => {
+    if (selectedIds.length !== 1) return;
+
+    const selectedObject = objects.find(obj => obj.id === selectedIds[0]);
+    if (!selectedObject || selectedObject.type !== 'group') return;
+
+    const command = new UngroupObjectsCommand(selectedIds[0]);
+    executeCommand(command);
+
+    // Clear selection after ungrouping
+    clearObjectSelection();
+  };
+
+  // Check if selected object is a group (for ungroup button)
+  const selectedIsGroup = selectedIds.length === 1 &&
+    objects.find(obj => obj.id === selectedIds[0])?.type === 'group';
+
   return (
     <div className="w-64 h-full bg-[#18181B]/80 backdrop-blur-md border-r border-[#27272A] flex flex-col">
       {/* Tabs */}
@@ -238,6 +267,22 @@ export function HierarchyPanel() {
           <div className="flex items-center justify-between p-3 border-b border-[#27272A]">
             <h2 className="text-sm font-medium text-[#FAFAFA]">Scene</h2>
             <div className="flex items-center gap-1">
+          <button
+            onClick={handleGroup}
+            disabled={selectedIds.length < 2}
+            className="p-1.5 rounded hover:bg-[#27272A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Group (Ctrl+G)"
+          >
+            <Group className="w-4 h-4 text-[#A1A1AA]" />
+          </button>
+          <button
+            onClick={handleUngroup}
+            disabled={!selectedIsGroup}
+            className="p-1.5 rounded hover:bg-[#27272A] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Ungroup (Ctrl+Shift+G)"
+          >
+            <Ungroup className="w-4 h-4 text-[#A1A1AA]" />
+          </button>
           <button
             onClick={handleEnterEditMode}
             disabled={selectedIds.length !== 1}

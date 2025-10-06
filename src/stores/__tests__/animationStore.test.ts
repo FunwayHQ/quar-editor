@@ -198,7 +198,10 @@ describe('animationStore', () => {
 
       const updated = useAnimationStore.getState().getTrack(animation.id, track.id);
       expect(updated?.keyframes).toHaveLength(1);
-      expect(updated?.keyframes[0]).toEqual(keyframe);
+      expect(updated?.keyframes[0]).toEqual({
+        ...keyframe,
+        space: 'local', // Sprint 9: Keyframes now default to local space
+      });
     });
 
     it('should sort keyframes by time when adding', () => {

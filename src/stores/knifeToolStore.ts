@@ -16,10 +16,16 @@ export interface IntersectionPoint {
   uv: THREE.Vector2;
 }
 
+export type KnifeCutMode = 'triangle' | 'quad';
+
 export interface KnifeToolState {
   // Tool state
   isActive: boolean;
   isDrawing: boolean;
+
+  // Sprint Y: Cut mode toggle
+  cutMode: KnifeCutMode;
+  setCutMode: (mode: KnifeCutMode) => void;
 
   // Path data
   drawingPath: THREE.Vector3[];
@@ -42,9 +48,13 @@ export const useKnifeToolStore = create<KnifeToolState>((set, get) => ({
   // Initial state
   isActive: false,
   isDrawing: false,
+  cutMode: 'quad', // Sprint Y: Default to quad mode for intuitive UX
   drawingPath: [],
   intersectionPoints: [],
   targetFaceIndex: null,
+
+  // Sprint Y: Set cut mode
+  setCutMode: (mode) => set({ cutMode: mode }),
 
   // Activate the knife tool
   activateTool: () => {

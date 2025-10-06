@@ -11,6 +11,18 @@ import * as matchers from '@testing-library/jest-dom/matchers';
 // Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers);
 
+// Sprint Y: Suppress Three.js multiple instance warning in test environment
+// This is safe because Vite config ensures single instance via aliases
+const originalWarn = console.warn;
+console.warn = (...args: any[]) => {
+  const message = args[0]?.toString() || '';
+  if (message.includes('Multiple instances of Three.js')) {
+    // Suppress this warning in tests - we have proper aliasing configured
+    return;
+  }
+  originalWarn.apply(console, args);
+};
+
 // Cleanup after each test
 afterEach(() => {
   cleanup();

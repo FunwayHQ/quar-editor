@@ -304,9 +304,76 @@ export class MeshOperations {
     selectedFaces: Set<number>,
     divisions: number = 1
   ): void {
-    // This is a placeholder for subdivision functionality
-    // Full implementation would create new vertices and faces
-    console.log('Subdivide faces not yet implemented');
+    // Sprint Y: Real subdivision implementation
+    const index = geometry.index;
+    const positions = geometry.attributes.position;
+
+    if (!index) {
+      console.warn('[Subdivide] Geometry must be indexed');
+      return;
+    }
+
+    // Build new geometry data
+    const newPositions: number[] = [];
+    const newIndices: number[] = [];
+    const vertexMap = new Map<number, number>(); // old index -> new index
+    let nextVertexIndex = 0;
+
+    // Copy all existing vertices first
+    for (let i = 0; i < positions.count; i++) {
+      newPositions.push(positions.getX(i), positions.getY(i), positions.getZ(i));
+      vertexMap.set(i, nextVertexIndex++);
+    }
+
+    // Process each face
+    for (let faceIdx = 0; faceIdx < index.count / 3; faceIdx++) {
+      const i = faceIdx * 3;
+      const v0 = index.getX(i);
+      const v1 = index.getX(i + 1);
+      const v2 = index.getX(i + 2);
+
+      if (selectedFaces.has(faceIdx)) {
+        // Subdivide: Create center vertex and split into 3 triangles
+        const p0 = new THREE.Vector3(positions.getX(v0), positions.getY(v0), positions.getZ(v0));
+        const p1 = new THREE.Vector3(positions.getX(v1), positions.getY(v1), positions.getZ(v1));
+        const p2 = new THREE.Vector3(positions.getX(v2), positions.getY(v2), positions.getZ(v2));
+
+        // Face center
+        const center = new THREE.Vector3()
+          .add(p0)
+          .add(p1)
+          .add(p2)
+          .divideScalar(3);
+
+        // Add center vertex
+        newPositions.push(center.x, center.y, center.z);
+        const centerIdx = nextVertexIndex++;
+
+        // Create 3 new triangles
+        const mappedV0 = vertexMap.get(v0)!;
+        const mappedV1 = vertexMap.get(v1)!;
+        const mappedV2 = vertexMap.get(v2)!;
+
+        newIndices.push(mappedV0, mappedV1, centerIdx);
+        newIndices.push(mappedV1, mappedV2, centerIdx);
+        newIndices.push(mappedV2, mappedV0, centerIdx);
+      } else {
+        // Keep face unchanged
+        const mappedV0 = vertexMap.get(v0)!;
+        const mappedV1 = vertexMap.get(v1)!;
+        const mappedV2 = vertexMap.get(v2)!;
+        newIndices.push(mappedV0, mappedV1, mappedV2);
+      }
+    }
+
+    // Update geometry in place
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(newPositions, 3));
+    geometry.setIndex(newIndices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+
+    console.log(`[Subdivide] Subdivided ${selectedFaces.size} faces. New vertices: ${nextVertexIndex}`);
   }
 
   /**

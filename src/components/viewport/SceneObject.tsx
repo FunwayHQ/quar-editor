@@ -5,9 +5,9 @@
  * Now with full PBR material support from materials store.
  */
 
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { SceneObject as SceneObjectType } from '../../stores/objectsStore';
+import { SceneObject as SceneObjectType, useObjectsStore } from '../../stores/objectsStore';
 import { useMaterialsStore } from '../../stores/materialsStore';
 import { useSceneStore } from '../../stores/sceneStore';
 import { useEditModePicking } from '../../hooks/useEditModePicking';
@@ -21,6 +21,48 @@ import {
   findNearbyEdge,
   closestPointOnLine,
 } from '../../lib/geometry/IntersectionUtils';
+import { findQuadPair } from '../../lib/geometry/QuadDetection';
+import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
+
+// Sprint Y: Memoized knife wireframe to prevent memory leak
+function KnifeWireframe({ geometry }: { geometry: THREE.BufferGeometry }) {
+  const edgesGeo = useMemo(() => {
+    const quadEdgesList = getQuadEdges(geometry);
+    const positions = geometry.attributes.position;
+    const edgePositions: number[] = [];
+
+    quadEdgesList.forEach(([v0, v1]) => {
+      edgePositions.push(
+        positions.getX(v0), positions.getY(v0), positions.getZ(v0),
+        positions.getX(v1), positions.getY(v1), positions.getZ(v1)
+      );
+    });
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+    return geo;
+  }, [geometry]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (edgesGeo) {
+        edgesGeo.dispose();
+      }
+    };
+  }, [edgesGeo]);
+
+  return (
+    <lineSegments geometry={edgesGeo}>
+      <lineBasicMaterial
+        color="#10B981"
+        transparent
+        opacity={0.3}
+        depthTest={false}
+      />
+    </lineSegments>
+  );
+}
 
 interface SceneObjectProps {
   object: SceneObjectType;
@@ -32,6 +74,14 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   const meshRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.Light>(null);
 
+  // Get child objects for recursive rendering
+  const objects = useObjectsStore((state) => state.objects);
+  const childObjects = useMemo(() => {
+    return object.children
+      .map(childId => objects.get(childId))
+      .filter((child): child is SceneObjectType => child !== undefined);
+  }, [object.children, objects]);
+
   // Get shading mode from scene store
   const shadingMode = useSceneStore((state) => state.shadingMode);
 
@@ -42,6 +92,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   // Knife tool state
   const {
     isActive: isKnifeActive,
+    cutMode,
     drawingPath,
     intersectionPoints,
     targetFaceIndex,
@@ -129,6 +180,11 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       geo.computeBoundingBox();
       geo.computeBoundingSphere();
 
+      // Sprint Y: Restore userData (includes feature edges)
+      if (data.userData) {
+        geo.userData = data.userData;
+      }
+
       return geo;
     }
 
@@ -197,6 +253,9 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
           params.width || 1,
           params.height || 1
         );
+      case 'group':
+        // Groups are invisible containers, no geometry
+        return null;
       default:
         return new THREE.BoxGeometry(1, 1, 1);
     }
@@ -365,6 +424,17 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     };
   }, [geometry, material]);
 
+  // Helper: Get the root parent (top of hierarchy) for group selection
+  const getRootParent = (obj: SceneObjectType): SceneObjectType => {
+    let current = obj;
+    while (current.parentId) {
+      const parent = objects.get(current.parentId);
+      if (!parent) break;
+      current = parent;
+    }
+    return current;
+  };
+
   // Handle click
   const handleClick = (event: THREE.Event) => {
     console.log('[SceneObject] Clicked:', object.name, 'Type:', object.type);
@@ -375,11 +445,12 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       const intersection = (event as any).intersections?.[0];
       if (intersection) {
         // Try to find nearby edge to snap to
+        // Sprint Y: Edge-only knife tool (must click near edge)
         const nearbyEdge = findNearbyEdge(
           intersection.point,
           meshRef.current.geometry,
           meshRef.current,
-          0.15 // Snap threshold
+          0.2 // Snap threshold - generous for ease of use
         );
 
         let snapPoint: THREE.Vector3;
@@ -401,14 +472,29 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
           console.log('[KnifeTool] Snapped to edge:', nearbyEdge);
         } else {
-          // Use the clicked point
-          snapPoint = intersection.point.clone();
+          // Sprint Y: REQUIRE edge snapping - don't allow points away from edges
+          console.warn('[KnifeTool] Click must be near an edge. Click closer to an edge.');
+          return; // Reject this click
         }
 
-        // If we already have a target face, validate this click is on the same face
+        // Sprint Y: Validate face based on cut mode
         if (targetFaceIndex !== null && intersection.faceIndex !== targetFaceIndex) {
-          console.warn('[KnifeTool] Second point must be on the same face! Click on face', targetFaceIndex);
-          return; // Ignore clicks on different faces
+          // Check if in quad mode - allow clicking on quad pair
+          if (cutMode === 'quad') {
+            const quadPair = findQuadPair(targetFaceIndex, meshRef.current.geometry);
+            if (quadPair !== null && intersection.faceIndex === quadPair) {
+              console.log('[KnifeTool] Quad mode: Second point on quad pair - OK');
+              // Update target face to the clicked one for consistency
+              // (both will be cut anyway)
+            } else {
+              console.warn('[KnifeTool] Second point must be on the same quad! Click on face', targetFaceIndex, 'or its pair', quadPair);
+              return;
+            }
+          } else {
+            // Triangle mode - must be exact same triangle
+            console.warn('[KnifeTool] Second point must be on the same triangle! Click on face', targetFaceIndex);
+            return;
+          }
         }
 
         // Add point to cutting path (pass face index for first point)
@@ -447,7 +533,9 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
     // Priority 3: Normal object selection
     else {
-      onSelect(object.id, event.nativeEvent.shiftKey || event.nativeEvent.ctrlKey || event.nativeEvent.metaKey);
+      // If object has a parent (is in a group), select the root parent instead
+      const targetObject = getRootParent(object);
+      onSelect(targetObject.id, event.nativeEvent.shiftKey || event.nativeEvent.ctrlKey || event.nativeEvent.metaKey);
     }
   };
 
@@ -468,7 +556,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     switch (object.type) {
       case 'pointLight':
         return (
-          <group position={object.position}>
+          <group position={object.position} rotation={object.rotation} scale={object.scale}>
             <pointLight
               ref={lightRef}
               color={lightColor}
@@ -485,12 +573,21 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             <mesh onClick={handleClick} geometry={lightHelperGeometries.pointLightSphere}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} />
             </mesh>
+            {/* Render children recursively */}
+            {childObjects.map((child) => (
+              <SceneObject
+                key={child.id}
+                object={child}
+                isSelected={false}
+                onSelect={onSelect}
+              />
+            ))}
           </group>
         );
 
       case 'spotLight':
         return (
-          <group position={object.position} rotation={object.rotation}>
+          <group position={object.position} rotation={object.rotation} scale={object.scale}>
             <spotLight
               ref={lightRef}
               color={lightColor}
@@ -509,12 +606,21 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             <mesh onClick={handleClick} geometry={lightHelperGeometries.spotLightCone}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} wireframe />
             </mesh>
+            {/* Render children recursively */}
+            {childObjects.map((child) => (
+              <SceneObject
+                key={child.id}
+                object={child}
+                isSelected={false}
+                onSelect={onSelect}
+              />
+            ))}
           </group>
         );
 
       case 'directionalLight':
         return (
-          <group position={object.position} rotation={object.rotation}>
+          <group position={object.position} rotation={object.rotation} scale={object.scale}>
             <directionalLight
               ref={lightRef}
               color={lightColor}
@@ -535,12 +641,21 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             <mesh onClick={handleClick} geometry={lightHelperGeometries.directionalLightPlane}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} side={THREE.DoubleSide} />
             </mesh>
+            {/* Render children recursively */}
+            {childObjects.map((child) => (
+              <SceneObject
+                key={child.id}
+                object={child}
+                isSelected={false}
+                onSelect={onSelect}
+              />
+            ))}
           </group>
         );
 
       case 'ambientLight':
         return (
-          <group position={object.position}>
+          <group position={object.position} rotation={object.rotation} scale={object.scale}>
             <ambientLight
               ref={lightRef}
               color={lightColor}
@@ -550,6 +665,15 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             <mesh onClick={handleClick} geometry={lightHelperGeometries.ambientLightIco}>
               <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} wireframe />
             </mesh>
+            {/* Render children recursively */}
+            {childObjects.map((child) => (
+              <SceneObject
+                key={child.id}
+                object={child}
+                isSelected={false}
+                onSelect={onSelect}
+              />
+            ))}
           </group>
         );
     }
@@ -589,75 +713,70 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     return boxGeo;
   }, [geometry, object.name]);
 
-  // Render meshes
+  // Render meshes with hierarchy support
   return (
-    <>
-      <mesh
-        ref={meshRef}
-        key={`${object.id}-${shadingMode}`}
-        geometry={geometry}
-        material={material}
-        position={object.position}
-        rotation={object.rotation}
-        scale={object.scale}
-        onClick={handleClick}
-        userData={{ id: object.id, type: object.type }}
-        castShadow
-        receiveShadow
-      />
+    <group position={object.position} rotation={object.rotation} scale={object.scale}>
+      {/* Only render mesh if geometry exists (groups have no geometry) */}
+      {geometry && (
+        <>
+          <mesh
+            ref={meshRef}
+            key={`${object.id}-${shadingMode}`}
+            geometry={geometry}
+            material={material}
+            onClick={handleClick}
+            userData={{ id: object.id, type: object.type }}
+            castShadow
+            receiveShadow
+          />
 
-      {/* Invisible bounding box for easier selection */}
-      {!isEditMode && boundingBox && (
-        <mesh
-          geometry={boundingBox}
-          position={object.position}
-          rotation={object.rotation}
-          scale={object.scale}
-          onClick={handleClick}
-          visible={false}
-        >
-          <meshBasicMaterial transparent opacity={0} />
-        </mesh>
+          {/* Invisible bounding box for easier selection */}
+          {!isEditMode && boundingBox && (
+            <mesh
+              geometry={boundingBox}
+              onClick={handleClick}
+              visible={false}
+            >
+              <meshBasicMaterial transparent opacity={0} />
+            </mesh>
+          )}
+        </>
       )}
 
       {/* Knife tool: Show edges as wireframe overlay */}
-      {isKnifeActive && isEditMode && editingObjectId === object.id && meshRef.current && (
+      {geometry && isKnifeActive && isEditMode && editingObjectId === object.id && meshRef.current && (
         <>
-          {/* Show all edges if no points selected yet */}
-          {drawingPath.length === 0 && (
-            <mesh
-              geometry={geometry}
-              position={object.position}
-              rotation={object.rotation}
-              scale={object.scale}
-            >
-              <meshBasicMaterial
-                color="#10B981"
-                wireframe
-                transparent
-                opacity={0.3}
-                depthTest={false}
-              />
-            </mesh>
-          )}
+          {/* Show quad edges if no points selected yet - MEMOIZED to prevent memory leak */}
+          {drawingPath.length === 0 && <KnifeWireframe geometry={geometry} />}
 
           {/* Show only the selected face's edges after first point */}
-          {drawingPath.length === 1 && targetFaceIndex !== null && (
+          {/* Sprint Y: KnifeFaceHighlight now handles quad mode internally */}
+          {drawingPath.length === 1 && targetFaceIndex !== null && geometry && (
             <KnifeFaceHighlight
               geometry={geometry}
               faceIndex={targetFaceIndex}
-              position={object.position}
-              rotation={object.rotation}
-              scale={object.scale}
+              position={[0, 0, 0]}
+              rotation={[0, 0, 0]}
+              scale={[1, 1, 1]}
             />
           )}
         </>
       )}
 
       {/* Edit mode helpers for vertex/edge/face selection */}
-      {isEditMode && editingObjectId === object.id && !isKnifeActive && meshRef.current && (
+      {geometry && isEditMode && editingObjectId === object.id && !isKnifeActive && meshRef.current && (
         <EditModeHelpers mesh={meshRef.current} objectId={object.id} />
       )}
-    </>
+
+      {/* Render children recursively - children inherit parent transform */}
+      {childObjects.map((child) => (
+        <SceneObject
+          key={child.id}
+          object={child}
+          isSelected={false}
+          onSelect={onSelect}
+        />
+      ))}
+    </group>
   );
 }

@@ -101,7 +101,7 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
             ? 'bg-accent text-white'
             : 'text-text-secondary hover:text-text-primary hover:bg-panel'
         }`}
-        title="Toggle Grid (G)"
+        title="Toggle Grid"
       >
         <Grid3x3 className="w-4 h-4" />
       </button>

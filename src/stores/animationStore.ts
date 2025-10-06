@@ -17,6 +17,7 @@ export interface Keyframe {
   value: any;                // Value at this keyframe (number, vector3, color, etc.)
   interpolation: InterpolationType;
   easing?: [number, number, number, number]; // Cubic bezier control points for 'bezier' mode
+  space?: 'local' | 'world'; // Coordinate space (local = relative to parent, world = absolute)
 }
 
 // Animation track (one property of one object)
@@ -227,6 +228,12 @@ export const useAnimationStore = create<AnimationState>((set, get) => ({
     const animation = state.animations.get(animationId);
     if (!animation) return state;
 
+    // Ensure keyframe has space property (default to 'local' for new keyframes)
+    const keyframeWithSpace: Keyframe = {
+      ...keyframe,
+      space: keyframe.space ?? 'local', // Default to local space
+    };
+
     const newAnimations = new Map(state.animations);
     newAnimations.set(animationId, {
       ...animation,
@@ -239,13 +246,13 @@ export const useAnimationStore = create<AnimationState>((set, get) => ({
         if (existingIndex >= 0) {
           // Update existing keyframe instead of adding duplicate
           const updatedKeyframes = [...track.keyframes];
-          updatedKeyframes[existingIndex] = { ...updatedKeyframes[existingIndex], value: keyframe.value };
+          updatedKeyframes[existingIndex] = { ...updatedKeyframes[existingIndex], value: keyframe.value, space: keyframeWithSpace.space };
           return { ...track, keyframes: updatedKeyframes };
         } else {
           // Add new keyframe and sort
           return {
             ...track,
-            keyframes: [...track.keyframes, keyframe].sort((a, b) => a.time - b.time),
+            keyframes: [...track.keyframes, keyframeWithSpace].sort((a, b) => a.time - b.time),
           };
         }
       }),

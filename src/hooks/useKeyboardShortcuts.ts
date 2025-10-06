@@ -11,13 +11,15 @@ import { useAnimationStore } from '../stores/animationStore';
 import { useEditModeStore } from '../stores/editModeStore';
 import { useKnifeToolStore } from '../stores/knifeToolStore';
 import { useSceneStore } from '../stores/sceneStore';
+import { useModalModeStore } from '../stores/modalModeStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand } from '../lib/commands/ObjectCommands';
+import { GroupObjectsCommand, UngroupObjectsCommand } from '../lib/commands/GroupCommands';
 import { getAnimationEngine } from '../lib/animation/AnimationEngine';
 import { DeleteVerticesCommand } from '../lib/commands/EditModeCommands';
 import { meshRegistry } from '../lib/mesh/MeshRegistry';
 import * as THREE from 'three';
 
-export function useKeyboardShortcuts() {
+export function useKeyboardShortcuts(setShowAddMenu?: (show: boolean) => void) {
   const { selectedIds, setTransformMode } = useObjectsStore();
   const { executeCommand, undo, redo } = useCommandStore();
   const { isPlaying, isPaused, activeAnimationId, animations, currentTime, play, pause, stop, setCurrentTime, autoKeyframe, playbackSpeed } = useAnimationStore();
@@ -167,20 +169,24 @@ export function useKeyboardShortcuts() {
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
 
-      // Transform mode shortcuts
-      if (e.key === 'w' || e.key === 'W') {
+      // Sprint Y: Blender-standard transform shortcuts
+      // G = Grab (Move), R = Rotate, S = Scale
+      if ((e.key === 'g' || e.key === 'G') && !cmdOrCtrl && !isEditMode) {
         e.preventDefault();
         setTransformMode('translate');
-      } else if (e.key === 'e' || e.key === 'E') {
+        useModalModeStore.getState().enterGrabMode();
+      } else if ((e.key === 'r' || e.key === 'R') && !cmdOrCtrl && !isEditMode) {
         e.preventDefault();
         setTransformMode('rotate');
-      } else if (e.key === 'r' || e.key === 'R') {
+        useModalModeStore.getState().enterRotateMode();
+      } else if ((e.key === 's' || e.key === 'S') && !cmdOrCtrl && !isEditMode) {
         e.preventDefault();
         setTransformMode('scale');
+        useModalModeStore.getState().enterScaleMode();
       }
 
-      // Delete shortcut
-      else if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Sprint Y: X = Delete (Blender standard), also keep Delete/Backspace
+      else if (e.key === 'x' || e.key === 'X' || e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
 
         if (isEditMode && editingObjectId) {
@@ -206,6 +212,31 @@ export function useKeyboardShortcuts() {
           e.preventDefault();
           const command = new DuplicateObjectsCommand(selectedIds);
           executeCommand(command);
+        }
+      }
+
+      // Group shortcut (Ctrl+G / Cmd+G)
+      else if (cmdOrCtrl && !e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+        if (selectedIds.length >= 2) {
+          e.preventDefault();
+          const command = new GroupObjectsCommand(selectedIds);
+          executeCommand(command);
+          // Clear selection after grouping
+          useObjectsStore.getState().clearSelection();
+        }
+      }
+
+      // Ungroup shortcut (Ctrl+Shift+G / Cmd+Shift+G)
+      else if (cmdOrCtrl && e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+        if (selectedIds.length === 1) {
+          e.preventDefault();
+          const selectedObject = useObjectsStore.getState().objects.get(selectedIds[0]);
+          if (selectedObject && selectedObject.type === 'group') {
+            const command = new UngroupObjectsCommand(selectedIds[0]);
+            executeCommand(command);
+            // Clear selection after ungrouping
+            useObjectsStore.getState().clearSelection();
+          }
         }
       }
 
@@ -267,12 +298,34 @@ export function useKeyboardShortcuts() {
         }
       }
 
+      // Sprint Y: I key = Inset (Insert Face) in Edit Mode
+      else if (isEditMode && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        // Trigger inset - will be handled by EditOperationsPanel
+        console.log('[Shortcuts] I key pressed - Inset operation');
+        // Note: Actual operation handled by panel UI, this just logs for now
+      }
+
       // Edit Mode: Selection mode shortcuts (1/2/3)
       else if (isEditMode && ['1', '2', '3'].includes(e.key)) {
         e.preventDefault();
         if (e.key === '1') setSelectionMode('vertex');
         else if (e.key === '2') setSelectionMode('edge');
         else if (e.key === '3') setSelectionMode('face');
+      }
+
+      // Sprint Y: Edit Mode transform shortcuts (G/R/S)
+      else if (isEditMode && (e.key === 'g' || e.key === 'G') && !cmdOrCtrl) {
+        e.preventDefault();
+        setTransformMode('translate');
+      }
+      else if (isEditMode && (e.key === 'r' || e.key === 'R') && !cmdOrCtrl) {
+        e.preventDefault();
+        setTransformMode('rotate');
+      }
+      else if (isEditMode && (e.key === 's' || e.key === 'S') && !cmdOrCtrl) {
+        e.preventDefault();
+        setTransformMode('scale');
       }
 
       // Shading Modes (when not in edit mode): Z/X/C
@@ -289,10 +342,13 @@ export function useKeyboardShortcuts() {
         useSceneStore.getState().setShadingMode('material');
       }
 
-      // Toggle Grid: G
-      else if (e.key === 'g' || e.key === 'G') {
+      // Sprint Y: G key will be used for Grab (Move) in Day 2
+      // Grid toggle moved to menu only (no keyboard shortcut)
+
+      // Sprint Y: Shift+A = Add Menu (Blender standard)
+      else if (e.shiftKey && e.key === 'A' && !isEditMode && setShowAddMenu) {
         e.preventDefault();
-        useSceneStore.getState().setShowGrid(!useSceneStore.getState().showGrid);
+        setShowAddMenu(true);
       }
 
       // Object Creation: Shift + Number (use e.code for reliability)

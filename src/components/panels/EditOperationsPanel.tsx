@@ -278,6 +278,9 @@ export function EditOperationsPanel() {
 
       executeCommand(command);
 
+      // Sprint Y: Save geometry to store
+      saveGeometryToStore(mesh);
+
       // Clear the original geometry reference
       originalGeometryRef.current = null;
       setIsPreviewing(false);
@@ -290,9 +293,45 @@ export function EditOperationsPanel() {
         insetAmount
       );
       executeCommand(command);
+
+      // Sprint Y: Save geometry to store
+      saveGeometryToStore(mesh);
     }
 
-    console.log('Inset', selectedFaces.size, 'faces');
+    console.log('Inset', selectedFaces.size, 'faces - geometry saved');
+  };
+
+  // Helper: Save geometry to store
+  const saveGeometryToStore = (mesh: THREE.Mesh) => {
+    const geometry = mesh.geometry;
+    const positions = geometry.attributes.position;
+    const normals = geometry.attributes.normal;
+    const uvs = geometry.attributes.uv;
+    const index = geometry.index;
+
+    const geometryData = {
+      data: {
+        attributes: {
+          position: {
+            array: Array.from(positions.array),
+            itemSize: positions.itemSize,
+          },
+          normal: normals ? {
+            array: Array.from(normals.array),
+            itemSize: normals.itemSize,
+          } : undefined,
+          uv: uvs ? {
+            array: Array.from(uvs.array),
+            itemSize: uvs.itemSize,
+          } : undefined,
+        },
+        index: index ? {
+          array: Array.from(index.array),
+        } : undefined,
+      },
+    };
+
+    useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
   };
 
   const handleInsetPreviewStart = () => {
@@ -322,6 +361,9 @@ export function EditOperationsPanel() {
       return;
     }
 
+    // Store old geometry for undo
+    const oldGeometry = mesh.geometry.clone();
+
     // Perform subdivide operation
     MeshOperations.subdivideFaces(
       mesh.geometry,
@@ -329,7 +371,42 @@ export function EditOperationsPanel() {
       subdivisions
     );
 
-    console.log('Subdivided', selectedFaces.size, 'faces');
+    // Sprint Y: Save geometry back to store (critical!)
+    const geometry = mesh.geometry;
+    const positions = geometry.attributes.position;
+    const normals = geometry.attributes.normal;
+    const uvs = geometry.attributes.uv;
+    const index = geometry.index;
+
+    const geometryData = {
+      data: {
+        attributes: {
+          position: {
+            array: Array.from(positions.array),
+            itemSize: positions.itemSize,
+          },
+          normal: normals ? {
+            array: Array.from(normals.array),
+            itemSize: normals.itemSize,
+          } : undefined,
+          uv: uvs ? {
+            array: Array.from(uvs.array),
+            itemSize: uvs.itemSize,
+          } : undefined,
+        },
+        index: index ? {
+          array: Array.from(index.array),
+        } : undefined,
+      },
+    };
+
+    // Update object in store
+    useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
+
+    // Clear selection after subdivision
+    clearSelection();
+
+    console.log('Subdivided', selectedFaces.size, 'faces - geometry saved to store');
   };
 
   const handleCancel = () => {

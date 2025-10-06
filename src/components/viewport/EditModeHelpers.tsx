@@ -8,6 +8,7 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useEditModeStore, makeEdgeKey } from '../../stores/editModeStore';
+import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
 
 interface EditModeHelpersProps {
   mesh: THREE.Mesh;
@@ -74,11 +75,12 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
 
   // Create shared geometries for vertex helpers (reused, not recreated)
   const sharedVertexGeometries = useMemo(() => {
-    const outerGlow = new THREE.SphereGeometry(0.06, 8, 8);
-    const coreSphere = new THREE.SphereGeometry(0.04, 12, 12);
-    const unselectedSphere = new THREE.SphereGeometry(0.02, 6, 6);
-    const edgeEndpoint = new THREE.SphereGeometry(0.03, 8, 8);
-    const edgeEndpointSmall = new THREE.SphereGeometry(0.015, 6, 6);
+    // Sprint Y: Reduced sizes for better precision (50% smaller)
+    const outerGlow = new THREE.SphereGeometry(0.03, 8, 8);        // Was 0.06
+    const coreSphere = new THREE.SphereGeometry(0.02, 12, 12);     // Was 0.04
+    const unselectedSphere = new THREE.SphereGeometry(0.01, 6, 6); // Was 0.02
+    const edgeEndpoint = new THREE.SphereGeometry(0.015, 8, 8);    // Was 0.03
+    const edgeEndpointSmall = new THREE.SphereGeometry(0.008, 6, 6); // Was 0.015
 
     geometriesRef.current.push(outerGlow, coreSphere, unselectedSphere, edgeEndpoint, edgeEndpointSmall);
 
@@ -163,49 +165,16 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     if (selectionMode !== 'edge') return null;
 
     const edges: JSX.Element[] = [];
+
+    // Sprint Y: Use quad edge filtering to hide triangulation diagonals
+    const quadEdgesList = getQuadEdges(geometry);
+
+    // Build edge map from quad edges only (no diagonals!)
     const edgeMap = new Map<string, [number, number]>();
-
-    // Build edge map from faces
-    const indices = geometry.index;
-    if (indices) {
-      const indexArray = indices.array;
-      for (let i = 0; i < indexArray.length; i += 3) {
-        const a = indexArray[i];
-        const b = indexArray[i + 1];
-        const c = indexArray[i + 2];
-
-        // Add edges (always in sorted order to avoid duplicates)
-        const edges = [
-          [a, b],
-          [b, c],
-          [c, a],
-        ];
-
-        for (const [v1, v2] of edges) {
-          const key = makeEdgeKey(v1 as number, v2 as number);
-          if (!edgeMap.has(key)) {
-            edgeMap.set(key, [v1 as number, v2 as number]);
-          }
-        }
-      }
-    } else {
-      // Non-indexed geometry
-      const vertexCount = positions.count;
-      for (let i = 0; i < vertexCount; i += 3) {
-        const edges = [
-          [i, i + 1],
-          [i + 1, i + 2],
-          [i + 2, i],
-        ];
-
-        for (const [v1, v2] of edges) {
-          const key = makeEdgeKey(v1, v2);
-          if (!edgeMap.has(key)) {
-            edgeMap.set(key, [v1, v2]);
-          }
-        }
-      }
-    }
+    quadEdgesList.forEach(([v1, v2]) => {
+      const key = makeEdgeKey(v1, v2);
+      edgeMap.set(key, [v1, v2]);
+    });
 
     // Create edge lines using cylinders for better visibility
     edgeMap.forEach(([v1, v2], key) => {
@@ -241,8 +210,9 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
 
       if (isSelected) {
         // Create a thick cylinder for selected edges
-        const outerCyl = getCylinderGeometry(0.025, 0.025, edgeLength, 8);
-        const coreCyl = getCylinderGeometry(0.015, 0.015, edgeLength, 8);
+        // Sprint Y: Reduced edge thickness (50% smaller)
+        const outerCyl = getCylinderGeometry(0.0125, 0.0125, edgeLength, 8); // Was 0.025
+        const coreCyl = getCylinderGeometry(0.0075, 0.0075, edgeLength, 8);  // Was 0.015
 
         edges.push(
           <group key={`edge-${key}-group`}>
@@ -270,9 +240,10 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
           </group>
         );
       } else {
-        // Clickable overlay for unselected edges - larger and more visible
-        const clickCyl = getCylinderGeometry(0.02, 0.02, edgeLength, 8);
-        const visibleCyl = getCylinderGeometry(0.008, 0.008, edgeLength, 6);
+        // Clickable overlay for unselected edges
+        // Sprint Y: Reduced sizes (50% smaller)
+        const clickCyl = getCylinderGeometry(0.01, 0.01, edgeLength, 8);   // Was 0.02
+        const visibleCyl = getCylinderGeometry(0.004, 0.004, edgeLength, 6); // Was 0.008
 
         edges.push(
           <group key={`edge-${key}`}>
@@ -461,14 +432,29 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     return <>{faces}</>;
   }, [selectionMode, geometry, positions, selectedFaces, toggleFaceSelection]);
 
-  // Create edges geometry for face mode wireframe (memoized to prevent recreation)
+  // Create edges geometry for face mode wireframe (Sprint Y: Use quad edges only!)
   const edgesGeometry = useMemo(() => {
     if (selectionMode !== 'face') return null;
 
-    const edges = new THREE.EdgesGeometry(geometry);
-    geometriesRef.current.push(edges); // Track for disposal
-    return edges;
-  }, [selectionMode, geometry]);
+    // Use quad edge filtering to hide triangulation diagonals
+    const quadEdgesList = getQuadEdges(geometry);
+
+    // Create BufferGeometry with quad edges only
+    const edgesGeo = new THREE.BufferGeometry();
+    const edgePositions: number[] = [];
+
+    quadEdgesList.forEach(([v0, v1]) => {
+      edgePositions.push(
+        positions.getX(v0), positions.getY(v0), positions.getZ(v0),
+        positions.getX(v1), positions.getY(v1), positions.getZ(v1)
+      );
+    });
+
+    edgesGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+    geometriesRef.current.push(edgesGeo); // Track for disposal
+
+    return edgesGeo;
+  }, [selectionMode, geometry, positions]);
 
   // Add wireframe overlay for better face visibility in face mode
   const wireframeOverlay = useMemo(() => {

@@ -26,6 +26,7 @@ import { ExportDialog } from './export/ExportDialog';
 import { EditOperationsPanel } from './panels/EditOperationsPanel';
 import { KnifeToolPanel } from './panels/KnifeToolPanel';
 import { ViewportToolbar } from './viewport/ViewportToolbar';
+import { AddMenu } from './modals/AddMenu';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useAnimationKeyframes } from '../hooks/useAnimationKeyframes';
 import { useEditModeStore } from '../stores/editModeStore';
@@ -39,14 +40,15 @@ export function Editor() {
   const { success, error: showError } = useToastStore();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
   const [loading, setLoading] = useState(true);
   const { isEditMode } = useEditModeStore();
   const { isActive: isKnifeActive } = useKnifeToolStore();
 
   const storage = getStorageAdapter();
 
-  // Enable keyboard shortcuts
-  useKeyboardShortcuts();
+  // Enable keyboard shortcuts (Sprint Y: Pass setShowAddMenu for Shift+A)
+  useKeyboardShortcuts(setShowAddMenu);
 
   // Enable auto-keyframing
   useAnimationKeyframes();
@@ -477,6 +479,9 @@ export function Editor() {
 
       {/* Export Dialog */}
       {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
+
+      {/* Sprint Y: Add Menu (Shift+A) */}
+      <AddMenu isOpen={showAddMenu} onClose={() => setShowAddMenu(false)} />
 
       {/* Main Editor Area */}
       <main className="flex-1 relative flex flex-col overflow-hidden">

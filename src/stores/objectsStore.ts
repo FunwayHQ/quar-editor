@@ -6,6 +6,7 @@
 
 import { create } from 'zustand';
 import * as THREE from 'three';
+import { calculateGroupCenter, wouldCreateCircularDependency } from '../lib/hierarchy/TransformUtils';
 
 export type ObjectType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane' | 'group' | 'camera' | 'imported' | 'pointLight' | 'spotLight' | 'directionalLight' | 'ambientLight';
 
@@ -82,6 +83,11 @@ export interface ObjectsState {
   // Hierarchy
   setParent: (childId: string, parentId: string | null) => void;
   getChildren: (id: string) => SceneObject[];
+
+  // Grouping operations
+  createGroup: (objectIds: string[]) => string; // Returns group ID
+  ungroup: (groupId: string) => void;
+  createEmptyGroup: () => SceneObject;
 
   // Naming
   generateName: (type: ObjectType) => string;
@@ -404,5 +410,174 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
     ids.forEach(id => {
       get().removeObject(id);
     });
+  },
+
+  // Grouping operations
+  createGroup: (objectIds) => {
+    if (objectIds.length === 0) {
+      throw new Error('Cannot create group with no objects');
+    }
+
+    const state = get();
+
+    // Validate all objects exist and get them
+    const objectsToGroup = objectIds
+      .map(id => state.objects.get(id))
+      .filter((obj): obj is SceneObject => obj !== undefined);
+
+    if (objectsToGroup.length === 0) {
+      throw new Error('No valid objects to group');
+    }
+
+    // Calculate center position of all objects (in world space)
+    const centerPosition = calculateGroupCenter(objectIds);
+
+    // Create the group object
+    const groupName = state.generateName('group');
+    const now = Date.now();
+    const groupId = generateId();
+
+    // Do everything in a single atomic state update to prevent duplication
+    set((state) => {
+      const newObjects = new Map(state.objects);
+
+      // Create the group
+      const group: SceneObject = {
+        id: groupId,
+        name: groupName,
+        type: 'group',
+        visible: true,
+        locked: false,
+        position: centerPosition,
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+        parentId: null,
+        children: [...objectIds], // Will contain all child IDs
+        createdAt: now,
+        modifiedAt: now,
+      };
+
+      // Add group to map
+      newObjects.set(groupId, group);
+
+      // Update each child to point to this group as parent
+      // IMPORTANT: Convert world positions to local positions relative to group
+      objectIds.forEach(childId => {
+        const child = newObjects.get(childId);
+        if (child) {
+          // Remove from old parent if it had one
+          if (child.parentId) {
+            const oldParent = newObjects.get(child.parentId);
+            if (oldParent) {
+              oldParent.children = oldParent.children.filter(id => id !== childId);
+            }
+          }
+
+          // Convert child's current position to local space relative to group
+          // Since the group has no rotation/scale yet, this is simple subtraction
+          child.position = [
+            child.position[0] - centerPosition[0],
+            child.position[1] - centerPosition[1],
+            child.position[2] - centerPosition[2],
+          ];
+
+          // Set new parent
+          child.parentId = groupId;
+          child.modifiedAt = now;
+        }
+      });
+
+      return { objects: newObjects };
+    });
+
+    return groupId;
+  },
+
+  ungroup: (groupId) => {
+    const state = get();
+    const group = state.objects.get(groupId);
+
+    if (!group) {
+      throw new Error(`Group ${groupId} not found`);
+    }
+
+    if (group.type !== 'group') {
+      throw new Error(`Object ${groupId} is not a group`);
+    }
+
+    // Get all children
+    const childIds = [...group.children];
+
+    // Do everything in a single atomic state update
+    set((state) => {
+      const newObjects = new Map(state.objects);
+      const group = newObjects.get(groupId);
+
+      if (!group) return state;
+
+      // Convert children's local positions back to world positions
+      childIds.forEach(childId => {
+        const child = newObjects.get(childId);
+        if (child) {
+          // Convert local position to world position
+          // child.world = group.position + child.local
+          child.position = [
+            group.position[0] + child.position[0],
+            group.position[1] + child.position[1],
+            group.position[2] + child.position[2],
+          ];
+
+          // Set parent to group's parent (or null)
+          child.parentId = group.parentId;
+
+          // If moving to a new parent, add to that parent's children
+          if (group.parentId) {
+            const newParent = newObjects.get(group.parentId);
+            if (newParent && !newParent.children.includes(childId)) {
+              newParent.children.push(childId);
+            }
+          }
+
+          child.modifiedAt = Date.now();
+        }
+      });
+
+      // Delete the group
+      newObjects.delete(groupId);
+
+      // Remove group from its parent's children if it had a parent
+      if (group.parentId) {
+        const parent = newObjects.get(group.parentId);
+        if (parent) {
+          parent.children = parent.children.filter(id => id !== groupId);
+        }
+      }
+
+      return { objects: newObjects };
+    });
+  },
+
+  createEmptyGroup: () => {
+    const state = get();
+    const groupName = state.generateName('group');
+    const now = Date.now();
+
+    const group: SceneObject = {
+      id: generateId(),
+      name: groupName,
+      type: 'group',
+      visible: true,
+      locked: false,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      parentId: null,
+      children: [],
+      createdAt: now,
+      modifiedAt: now,
+    };
+
+    state.addObject(group);
+    return group;
   },
 }));
