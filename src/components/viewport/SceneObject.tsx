@@ -43,24 +43,30 @@ function KnifeWireframe({ geometry }: { geometry: THREE.BufferGeometry }) {
     return geo;
   }, [geometry]);
 
+  // Memoized material to prevent recreation on every render
+  const edgeMaterial = useMemo(() => {
+    return new THREE.LineBasicMaterial({
+      color: '#10B981',
+      transparent: true,
+      opacity: 0.3,
+      depthTest: false,
+    });
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (edgesGeo) {
         edgesGeo.dispose();
       }
+      if (edgeMaterial) {
+        edgeMaterial.dispose();
+      }
     };
-  }, [edgesGeo]);
+  }, [edgesGeo, edgeMaterial]);
 
   return (
-    <lineSegments geometry={edgesGeo}>
-      <lineBasicMaterial
-        color="#10B981"
-        transparent
-        opacity={0.3}
-        depthTest={false}
-      />
-    </lineSegments>
+    <lineSegments geometry={edgesGeo} material={edgeMaterial} />
   );
 }
 
@@ -119,12 +125,32 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     ambientLightIco: new THREE.IcosahedronGeometry(0.2, 1),
   }), []);
 
+  // Shared light helper materials (created once per color change)
+  const lightHelperMaterials = useMemo(() => {
+    if (!isLight) return null;
+    const color = isSelected ? '#7C3AED' : (object.lightProps?.color || '#FFFFFF');
+    return {
+      solid: new THREE.MeshBasicMaterial({ color }),
+      wireframe: new THREE.MeshBasicMaterial({ color, wireframe: true }),
+      doubleSided: new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }),
+    };
+  }, [isLight, isSelected, object.lightProps?.color]);
+
   // Cleanup light helper geometries on unmount
   useEffect(() => {
     return () => {
       Object.values(lightHelperGeometries).forEach(geo => geo.dispose());
     };
   }, [lightHelperGeometries]);
+
+  // Cleanup light helper materials on unmount
+  useEffect(() => {
+    if (lightHelperMaterials) {
+      return () => {
+        Object.values(lightHelperMaterials).forEach(mat => mat.dispose());
+      };
+    }
+  }, [lightHelperMaterials]);
 
   // Create geometry based on object type
   const geometry = useMemo(() => {
@@ -261,12 +287,17 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
   }, [object.type, object.geometryParams, object.importedGeometry, object.geometry]);
 
+  // Memoize material color separately to prevent full material recreation
+  const materialColor = useMemo(() => {
+    return isSelected ? '#7C3AED' : '#FFFFFF';
+  }, [isSelected]);
+
   // Create material with PBR properties
   const material = useMemo(() => {
     // Override material based on shading mode
     if (shadingMode === 'wireframe') {
       return new THREE.MeshBasicMaterial({
-        color: isSelected ? '#7C3AED' : '#FFFFFF',
+        color: materialColor,
         wireframe: true,
       });
     }
@@ -395,34 +426,35 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
   }, [object.id, isLight]);
 
-  // Cleanup: Dispose geometry and material on unmount or when they change
+  // Cleanup: Dispose geometry on unmount or when it changes
   useEffect(() => {
-    // Store references to current geometry and material
     const currentGeometry = geometry;
-    const currentMaterial = material;
 
     return () => {
-      // Dispose geometry
       if (currentGeometry) {
         currentGeometry.dispose();
       }
+    };
+  }, [geometry]);
 
-      // Dispose material (including textures)
-      if (currentMaterial) {
-        if (currentMaterial instanceof THREE.Material) {
-          // Dispose textures in material
-          Object.keys(currentMaterial).forEach((key) => {
-            const value = (currentMaterial as any)[key];
-            if (value && value instanceof THREE.Texture) {
-              value.dispose();
-            }
-          });
-          // Dispose material itself
-          currentMaterial.dispose();
-        }
+  // Cleanup: Dispose material on unmount or when it changes (separate from geometry!)
+  useEffect(() => {
+    const currentMaterial = material;
+
+    return () => {
+      if (currentMaterial && currentMaterial instanceof THREE.Material) {
+        // Dispose textures in material
+        Object.keys(currentMaterial).forEach((key) => {
+          const value = (currentMaterial as any)[key];
+          if (value && value instanceof THREE.Texture) {
+            value.dispose();
+          }
+        });
+        // Dispose material itself
+        currentMaterial.dispose();
       }
     };
-  }, [geometry, material]);
+  }, [material]);
 
   // Helper: Get the root parent (top of hierarchy) for group selection
   const getRootParent = (obj: SceneObjectType): SceneObjectType => {
@@ -570,9 +602,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               shadow-radius={lightProps.shadowRadius || 1}
             />
             {/* Helper sphere to visualize light position */}
-            <mesh onClick={handleClick} geometry={lightHelperGeometries.pointLightSphere}>
-              <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} />
-            </mesh>
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.pointLightSphere} material={lightHelperMaterials?.solid} />
             {/* Render children recursively */}
             {childObjects.map((child) => (
               <SceneObject
@@ -603,9 +633,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               shadow-radius={lightProps.shadowRadius || 1}
             />
             {/* Helper cone to visualize spot light */}
-            <mesh onClick={handleClick} geometry={lightHelperGeometries.spotLightCone}>
-              <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} wireframe />
-            </mesh>
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.spotLightCone} material={lightHelperMaterials?.wireframe} />
             {/* Render children recursively */}
             {childObjects.map((child) => (
               <SceneObject
@@ -638,9 +666,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               shadow-camera-far={50}
             />
             {/* Helper to visualize directional light */}
-            <mesh onClick={handleClick} geometry={lightHelperGeometries.directionalLightPlane}>
-              <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} side={THREE.DoubleSide} />
-            </mesh>
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.directionalLightPlane} material={lightHelperMaterials?.doubleSided} />
             {/* Render children recursively */}
             {childObjects.map((child) => (
               <SceneObject
@@ -662,9 +688,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               intensity={lightProps.intensity}
             />
             {/* Helper sphere to visualize ambient light */}
-            <mesh onClick={handleClick} geometry={lightHelperGeometries.ambientLightIco}>
-              <meshBasicMaterial color={isSelected ? '#7C3AED' : lightProps.color} wireframe />
-            </mesh>
+            <mesh onClick={handleClick} geometry={lightHelperGeometries.ambientLightIco} material={lightHelperMaterials?.wireframe} />
             {/* Render children recursively */}
             {childObjects.map((child) => (
               <SceneObject
@@ -679,39 +703,49 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
   }
 
-  // Create bounding box for easier selection
-  const boundingBox = useMemo(() => {
-    if (!geometry) {
-      console.log('[SceneObject] No geometry for bounding box:', object.name);
-      return null;
-    }
-
-    geometry.computeBoundingBox();
-    if (!geometry.boundingBox) {
-      console.log('[SceneObject] No bounding box computed:', object.name);
-      return null;
-    }
-
-    const box = geometry.boundingBox;
-    const center = new THREE.Vector3();
-    const size = new THREE.Vector3();
-    box.getCenter(center);
-    box.getSize(size);
-
-    console.log('[SceneObject] Bounding box for', object.name, '- Size:', size.toArray(), 'Center:', center.toArray());
-
-    // Expand slightly for easier clicking (10% larger)
-    const boxGeo = new THREE.BoxGeometry(
-      Math.max(size.x * 1.1, 0.2),
-      Math.max(size.y * 1.1, 0.2),
-      Math.max(size.z * 1.1, 0.2)
-    );
-
-    // Center the box geometry
-    boxGeo.translate(center.x, center.y, center.z);
-
-    return boxGeo;
-  }, [geometry, object.name]);
+  // TEMPORARILY DISABLED FOR DEBUGGING - Bounding box causing memory leaks
+  // const boundingBoxRef = useRef<THREE.BoxGeometry | null>(null);
+  // const invisibleMaterial = useMemo(() => {
+  //   return new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+  // }, []);
+  // useEffect(() => {
+  //   return () => {
+  //     if (invisibleMaterial) {
+  //       invisibleMaterial.dispose();
+  //     }
+  //   };
+  // }, [invisibleMaterial]);
+  // useEffect(() => {
+  //   if (boundingBoxRef.current) {
+  //     boundingBoxRef.current.dispose();
+  //     boundingBoxRef.current = null;
+  //   }
+  //   if (!geometry) {
+  //     return;
+  //   }
+  //   geometry.computeBoundingBox();
+  //   if (!geometry.boundingBox) {
+  //     return;
+  //   }
+  //   const box = geometry.boundingBox;
+  //   const center = new THREE.Vector3();
+  //   const size = new THREE.Vector3();
+  //   box.getCenter(center);
+  //   box.getSize(size);
+  //   const boxGeo = new THREE.BoxGeometry(
+  //     Math.max(size.x * 1.1, 0.2),
+  //     Math.max(size.y * 1.1, 0.2),
+  //     Math.max(size.z * 1.1, 0.2)
+  //   );
+  //   boxGeo.translate(center.x, center.y, center.z);
+  //   boundingBoxRef.current = boxGeo;
+  //   return () => {
+  //     if (boundingBoxRef.current) {
+  //       boundingBoxRef.current.dispose();
+  //       boundingBoxRef.current = null;
+  //     }
+  //   };
+  // }, [geometry]);
 
   // Render meshes with hierarchy support
   return (
@@ -730,16 +764,15 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             receiveShadow
           />
 
-          {/* Invisible bounding box for easier selection */}
-          {!isEditMode && boundingBox && (
+          {/* Invisible bounding box for easier selection - TEMPORARILY DISABLED for debugging */}
+          {/* {!isEditMode && boundingBoxRef.current && (
             <mesh
-              geometry={boundingBox}
+              geometry={boundingBoxRef.current}
+              material={invisibleMaterial}
               onClick={handleClick}
               visible={false}
-            >
-              <meshBasicMaterial transparent opacity={0} />
-            </mesh>
-          )}
+            />
+          )} */}
         </>
       )}
 

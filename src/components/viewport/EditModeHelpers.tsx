@@ -97,10 +97,12 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     const purpleDarkEdge = new THREE.MeshBasicMaterial({ color: "#6B46C1", transparent: true, opacity: 0.5 });
     const yellowEdge = new THREE.MeshBasicMaterial({ color: "#FFFF00", transparent: true, opacity: 0.9 });
     const invisible = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthTest: false });
+    const goldFace = new THREE.MeshBasicMaterial({ color: "#FFD700", side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+    const purpleWireframe = new THREE.LineBasicMaterial({ color: "#7C3AED", opacity: 0.3, transparent: true, depthTest: false, depthWrite: false });
 
-    materialsRef.current.push(goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible);
+    materialsRef.current.push(goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible, goldFace, purpleWireframe);
 
-    return { goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible };
+    return { goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible, goldFace, purpleWireframe };
   }, []);
 
   // Create vertex helpers
@@ -348,15 +350,9 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
             <mesh
               key={`face-${faceIndex}`}
               onClick={(e) => handleFaceClick(e, faceIndex)}
-            >
-              <bufferGeometry attach="geometry" {...faceGeometry} />
-              <meshBasicMaterial
-                color="#FFD700"  // Gold for selected
-                side={THREE.DoubleSide}
-                transparent
-                opacity={0.4}
-              />
-            </mesh>
+              geometry={faceGeometry}
+              material={sharedMaterials.goldFace}
+            />
           );
         }
       }
@@ -413,24 +409,18 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
           faceGeometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
 
           faces.push(
-            <mesh key={`face-${faceIndex}`}>
-              <bufferGeometry attach="geometry" {...faceGeometry} />
-              <meshBasicMaterial
-                color="#FFD700"  // Gold for selected
-                side={THREE.DoubleSide}
-                depthTest={false}
-                depthWrite={false}
-                transparent
-                opacity={0.4}
-              />
-            </mesh>
+            <mesh
+              key={`face-${faceIndex}`}
+              geometry={faceGeometry}
+              material={sharedMaterials.goldFace}
+            />
           );
         }
       }
     }
 
     return <>{faces}</>;
-  }, [selectionMode, geometry, positions, selectedFaces, toggleFaceSelection]);
+  }, [selectionMode, geometry, positions, selectedFaces, toggleFaceSelection, sharedMaterials.goldFace]);
 
   // Create edges geometry for face mode wireframe (Sprint Y: Use quad edges only!)
   const edgesGeometry = useMemo(() => {
@@ -461,18 +451,9 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     if (selectionMode !== 'face' || !edgesGeometry) return null;
 
     return (
-      <lineSegments>
-        <primitive object={edgesGeometry} attach="geometry" />
-        <lineBasicMaterial
-          color="#7C3AED"
-          opacity={0.3}
-          transparent
-          depthTest={false}
-          depthWrite={false}
-        />
-      </lineSegments>
+      <lineSegments geometry={edgesGeometry} material={sharedMaterials.purpleWireframe} />
     );
-  }, [selectionMode, edgesGeometry]);
+  }, [selectionMode, edgesGeometry, sharedMaterials.purpleWireframe]);
 
   return (
     <group

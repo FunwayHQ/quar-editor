@@ -7,7 +7,7 @@
  * Sprint 5: Lighting & Environment
  */
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment } from '@react-three/drei';
 import { useSceneStore } from '@/stores/sceneStore';
@@ -30,16 +30,16 @@ import * as THREE from 'three';
 import { useEffect } from 'react';
 
 function Scene() {
-  const {
-    showGrid,
-    showAxes,
-    gridSize,
-    gridDivisions,
-    gridUnitSize,
-    gridColor,
-    gridOpacity,
-  } = useSceneStore();
+  // CRITICAL FIX: Use selective subscriptions to prevent re-renders from stats updates
+  const showGrid = useSceneStore((state) => state.showGrid);
+  const showAxes = useSceneStore((state) => state.showAxes);
+  const gridSize = useSceneStore((state) => state.gridSize);
+  const gridDivisions = useSceneStore((state) => state.gridDivisions);
+  const gridUnitSize = useSceneStore((state) => state.gridUnitSize);
+  const gridColor = useSceneStore((state) => state.gridColor);
+  const gridOpacity = useSceneStore((state) => state.gridOpacity);
   const cameraPreset = useSceneStore((state) => state.cameraPreset);
+
   const objects = useObjectsStore((state) => state.getAllObjects());
   const selectedIds = useObjectsStore((state) => state.selectedIds);
   const toggleSelection = useObjectsStore((state) => state.toggleSelection);
@@ -48,11 +48,11 @@ function Scene() {
   const { isEditMode } = useEditModeStore();
   const clearCurveSelection = useCurveStore((state) => state.clearSelection);
 
-  // Handle object selection - also clear curve selection
-  const handleObjectSelect = (id: string, multiSelect: boolean) => {
+  // Memoize callback to prevent SceneObject re-renders
+  const handleObjectSelect = useCallback((id: string, multiSelect: boolean) => {
     clearCurveSelection();
     toggleSelection(id, multiSelect);
-  };
+  }, [clearCurveSelection, toggleSelection]);
 
   // Environment settings
   const {
@@ -86,10 +86,44 @@ function Scene() {
   }, [cameraPreset, applyPreset]);
 
   // Handle background click to deselect
-  const handleBackgroundClick = () => {
+  const handleBackgroundClick = useCallback(() => {
     clearSelection();
     clearCurveSelection();
-  };
+  }, [clearSelection, clearCurveSelection]);
+
+  // Memoize grid helper to prevent recreation every render
+  const gridHelper = useMemo(() => {
+    return new THREE.GridHelper(
+      gridSize * gridUnitSize,  // Total size in meters
+      gridDivisions,            // Number of divisions
+      gridColor,                // Center line color
+      gridColor                 // Grid line color
+    );
+  }, [gridSize, gridUnitSize, gridDivisions, gridColor]);
+
+  // Memoize axes helper
+  const axesHelper = useMemo(() => {
+    return new THREE.AxesHelper(2);
+  }, []);
+
+  // Memoize grid plane material to prevent recreation
+  const gridPlaneMaterial = useMemo(() => {
+    return new THREE.MeshBasicMaterial({
+      color: gridColor,
+      transparent: true,
+      opacity: gridOpacity,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  }, [gridColor, gridOpacity]);
+
+  // Memoize ground plane material
+  const groundPlaneMaterial = useMemo(() => {
+    return new THREE.MeshStandardMaterial({
+      color: groundPlaneColor,
+      side: THREE.DoubleSide,
+    });
+  }, [groundPlaneColor]);
 
   return (
     <>
@@ -121,14 +155,7 @@ function Scene() {
       {showGrid && (
         <>
           {/* Grid lines */}
-          <primitive
-            object={new THREE.GridHelper(
-              gridSize * gridUnitSize,  // Total size in meters
-              gridDivisions,            // Number of divisions
-              gridColor,                // Center line color
-              gridColor                 // Grid line color
-            )}
-          />
+          <primitive object={gridHelper} />
 
           {/* Semi-transparent grid plane for better depth perception */}
           <mesh
@@ -137,25 +164,19 @@ function Scene() {
             receiveShadow={false}
           >
             <planeGeometry args={[gridSize * gridUnitSize, gridSize * gridUnitSize]} />
-            <meshBasicMaterial
-              color={gridColor}
-              transparent
-              opacity={gridOpacity}
-              depthWrite={false}
-              side={THREE.DoubleSide}
-            />
+            <primitive object={gridPlaneMaterial} attach="material" />
           </mesh>
         </>
       )}
 
       {/* Axes - X (Red), Y (Green), Z (Blue) */}
-      {showAxes && <primitive object={new THREE.AxesHelper(2)} />}
+      {showAxes && <primitive object={axesHelper} />}
 
       {/* Ground Plane */}
       {groundPlaneEnabled && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow={groundPlaneReceiveShadow}>
           <planeGeometry args={[groundPlaneSize, groundPlaneSize]} />
-          <meshStandardMaterial color={groundPlaneColor} side={THREE.DoubleSide} />
+          <primitive object={groundPlaneMaterial} attach="material" />
         </mesh>
       )}
 
