@@ -145,14 +145,14 @@ export function cutQuadFace(
   newPositions.push(cut2.x, cut2.y, cut2.z);
   const cut2Idx = nextVertexIndex++;
 
-  // Rebuild ALL faces - cut quad is replaced, others copied
+  // Rebuild ALL faces - skip cut quad, copy others, append 4 new triangles
   const newIndices: number[] = [];
   const faceCount = index.count / 3;
   const processedFaces = new Set<number>([faceIndex, quadPair]);
 
   for (let fIdx = 0; fIdx < faceCount; fIdx++) {
     if (processedFaces.has(fIdx)) {
-      // Skip - will be replaced by cut
+      // Skip cut faces - will be replaced by 4 new triangles
       continue;
     }
 
@@ -179,9 +179,33 @@ export function cutQuadFace(
   // Create feature edge key for the cut edge (VISIBLE)
   const cutEdgeKey = makeEdgeKey(cut1Idx, cut2Idx);
 
-  // Create diagonal edge keys (HIDDEN - for quad detection)
+  // Sprint 10: Mark the NEW quad diagonals as hidden
+  // Quad 1 (faces at indices faceCount-4, faceCount-3): diagonal = uniqueToFace1-cut2Idx
+  // Quad 2 (faces at indices faceCount-2, faceCount-1): diagonal = cut1Idx-diagonal2
   const diagonal1Key = makeEdgeKey(uniqueToFace1, cut2Idx);
   const diagonal2Key = makeEdgeKey(cut1Idx, diagonal2);
+
+  const newFaceCount = newIndices.length / 3;
+  const maxVertexIndex = Math.max(...newIndices);
+  const totalVertices = newPositions.length / 3;
+
+  console.log('[QuadKnifeCut] Index buffer validation:', {
+    originalFaces: faceCount,
+    newFaces: newFaceCount,
+    totalVertices,
+    maxVertexIndex,
+    isValid: maxVertexIndex < totalVertices,
+    cutFaces: [faceIndex, quadPair],
+    appendedFaces: [newFaceCount - 4, newFaceCount - 3, newFaceCount - 2, newFaceCount - 1],
+  });
+
+  if (maxVertexIndex >= totalVertices) {
+    console.error('[QuadKnifeCut] INVALID GEOMETRY - indices reference non-existent vertices!', {
+      maxIndex: maxVertexIndex,
+      vertexCount: totalVertices,
+    });
+    throw new Error('Invalid geometry - out of bounds vertex indices');
+  }
 
   // Validate geometry
   console.log('[QuadKnifeCut] Result validation:', {

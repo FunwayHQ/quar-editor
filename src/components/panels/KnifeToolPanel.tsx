@@ -158,12 +158,12 @@ export function KnifeToolPanel() {
           // Increment version to force EditModeHelpers re-render
           useEditModeStore.getState().incrementGeometryVersion();
 
-          // Switch to edge mode and clean up
-          setSelectionMode('edge');
+          // Sprint 10: Switch to FACE mode to avoid edge topology complexity
+          setSelectionMode('face');
           confirmCut();
           deactivateTool();
 
-          console.log('[KnifeTool] Geometry saved to store, switched to edge mode');
+          console.log('[KnifeTool] Geometry saved to store, switched to face mode');
           return; // Exit early
         } else {
           console.warn('[KnifeTool] No quad pair - falling back to triangle cut');

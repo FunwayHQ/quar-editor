@@ -68,10 +68,10 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', 'three', 'zustand', '@react-three/fiber', '@react-three/drei']
   },
   server: {
-    port: 5173,
+    port: 3001,
     hmr: {
       overlay: true,
-      port: 5173
+      port: 3001
     },
     watch: {
       usePolling: true

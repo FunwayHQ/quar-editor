@@ -75,7 +75,13 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
 
   // Sprint 10: Geometry version counter (incremented after knife cuts to force re-render)
   geometryVersion: 0,
-  incrementGeometryVersion: () => set((state) => ({ geometryVersion: state.geometryVersion + 1 })),
+  incrementGeometryVersion: () => {
+    set((state) => {
+      const newVersion = state.geometryVersion + 1;
+      console.log(`[EditModeStore] Incrementing geometryVersion: ${state.geometryVersion} → ${newVersion}`);
+      return { geometryVersion: newVersion };
+    });
+  },
 
   // Sprint Y: Merged vertex mode (ON by default)
   mergedVertexMode: true,

@@ -93,7 +93,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
   // Edit mode picking
   const { handleEditModeClick, isEditMode } = useEditModePicking();
-  const { editingObjectId } = useEditModeStore();
+  const { editingObjectId, geometryVersion } = useEditModeStore();
 
   // Knife tool state
   const {
@@ -797,8 +797,13 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       )}
 
       {/* Edit mode helpers for vertex/edge/face selection */}
+      {/* Sprint 10: Force re-mount when geometry changes (knife cuts) */}
       {geometry && isEditMode && editingObjectId === object.id && !isKnifeActive && meshRef.current && (
-        <EditModeHelpers mesh={meshRef.current} objectId={object.id} />
+        <EditModeHelpers
+          key={`edit-helpers-${object.id}-v${geometryVersion}`}
+          mesh={meshRef.current}
+          objectId={object.id}
+        />
       )}
 
       {/* Render children recursively - children inherit parent transform */}

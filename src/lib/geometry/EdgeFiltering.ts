@@ -162,6 +162,12 @@ function isTriangulationDiagonal(
   // Get all unique vertices
   const allVertices = new Set([...face1Vertices, ...face2Vertices]);
 
+  // Debug: Log quad detection
+  const isQuad = allVertices.size === 4;
+  if (!isQuad && edgeKey) {
+    console.log(`[EdgeFiltering] Edge ${edgeKey} NOT a quad diagonal - ${allVertices.size} unique vertices (faces ${face1Idx}, ${face2Idx})`);
+  }
+
   // If we have exactly 4 unique vertices, it's a quad
   if (allVertices.size === 4) {
     // This edge is likely the diagonal
