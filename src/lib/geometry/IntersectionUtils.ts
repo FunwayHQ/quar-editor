@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { IntersectionPoint } from '../../stores/knifeToolStore';
+import { findQuadPair } from './QuadDetection';
 
 /**
  * Find intersections between a line segment and a mesh
@@ -276,12 +277,95 @@ export interface EdgeIntersection {
   t: number;
 }
 
+/**
+ * Get the 4 exterior edges of a quad (filtering out the diagonal)
+ */
+function getQuadExteriorEdges(
+  faceIndex: number,
+  quadPairIndex: number,
+  geometry: THREE.BufferGeometry,
+  mesh: THREE.Mesh
+): Array<{ start: THREE.Vector3; end: THREE.Vector3; startIdx: number; endIdx: number; index: number }> {
+  const positions = geometry.attributes.position;
+  const indices = geometry.index!;
+
+  // Get vertices of both triangles
+  const i1 = faceIndex * 3;
+  const face1 = [
+    indices.getX(i1),
+    indices.getX(i1 + 1),
+    indices.getX(i1 + 2),
+  ];
+
+  const i2 = quadPairIndex * 3;
+  const face2 = [
+    indices.getX(i2),
+    indices.getX(i2 + 1),
+    indices.getX(i2 + 2),
+  ];
+
+  // Find shared vertices (diagonal)
+  const sharedVertices = face1.filter(v => face2.includes(v));
+
+  // Get all unique vertices (the 4 corners)
+  const allVertices = [...new Set([...face1, ...face2])];
+
+  if (allVertices.length !== 4 || sharedVertices.length !== 2) {
+    console.error('[IntersectionUtils] Invalid quad topology');
+    return [];
+  }
+
+  // Build all edges from both triangles
+  const allEdges = [
+    [face1[0], face1[1]],
+    [face1[1], face1[2]],
+    [face1[2], face1[0]],
+    [face2[0], face2[1]],
+    [face2[1], face2[2]],
+    [face2[2], face2[0]],
+  ];
+
+  // Create edge key helper
+  const makeKey = (v0: number, v1: number) => v0 < v1 ? `${v0}-${v1}` : `${v1}-${v0}`;
+  const diagonalKey = makeKey(sharedVertices[0], sharedVertices[1]);
+
+  // Filter to unique exterior edges (exclude diagonal)
+  const exteriorEdgesMap = new Map<string, [number, number]>();
+
+  allEdges.forEach(([v0, v1]) => {
+    const key = makeKey(v0, v1);
+
+    // Skip the diagonal
+    if (key === diagonalKey) {
+      return;
+    }
+
+    exteriorEdgesMap.set(key, [v0, v1]);
+  });
+
+  // Convert to world space edge objects
+  const exteriorEdges = Array.from(exteriorEdgesMap.values()).map(([v0, v1], index) => {
+    const start = new THREE.Vector3().fromBufferAttribute(positions, v0);
+    const end = new THREE.Vector3().fromBufferAttribute(positions, v1);
+
+    start.applyMatrix4(mesh.matrixWorld);
+    end.applyMatrix4(mesh.matrixWorld);
+
+    return { start, end, startIdx: v0, endIdx: v1, index };
+  });
+
+  console.log(`[IntersectionUtils] Quad has ${exteriorEdges.length} exterior edges (diagonal filtered)`);
+
+  return exteriorEdges;
+}
+
 export function projectCutOntoFace(
   pointA: THREE.Vector3,
   pointB: THREE.Vector3,
   faceIndex: number,
   geometry: THREE.BufferGeometry,
-  mesh: THREE.Mesh
+  mesh: THREE.Mesh,
+  quadMode: boolean = false
 ): EdgeIntersection[] {
   const positions = geometry.attributes.position;
   const indices = geometry.index;
@@ -318,11 +402,30 @@ export function projectCutOntoFace(
   // Check intersection with each edge
   const edgeIntersections: EdgeIntersection[] = [];
 
-  const edges = [
-    { start: v0World, end: v1World, startIdx: v0Idx, endIdx: v1Idx, index: 0 },
-    { start: v1World, end: v2World, startIdx: v1Idx, endIdx: v2Idx, index: 1 },
-    { start: v2World, end: v0World, startIdx: v2Idx, endIdx: v0Idx, index: 2 },
-  ];
+  // Sprint Y: Quad mode - use only exterior edges (filter out diagonal)
+  let edges;
+  if (quadMode) {
+    const quadPairIndex = findQuadPair(faceIndex, geometry);
+
+    if (quadPairIndex !== null) {
+      console.log(`[ProjectCut] Quad mode: Testing 4 exterior edges (face ${faceIndex} + ${quadPairIndex})`);
+      edges = getQuadExteriorEdges(faceIndex, quadPairIndex, geometry, mesh);
+    } else {
+      console.log('[ProjectCut] No quad pair found, falling back to triangle edges');
+      edges = [
+        { start: v0World, end: v1World, startIdx: v0Idx, endIdx: v1Idx, index: 0 },
+        { start: v1World, end: v2World, startIdx: v1Idx, endIdx: v2Idx, index: 1 },
+        { start: v2World, end: v0World, startIdx: v2Idx, endIdx: v0Idx, index: 2 },
+      ];
+    }
+  } else {
+    // Triangle mode - use 3 edges of single triangle
+    edges = [
+      { start: v0World, end: v1World, startIdx: v0Idx, endIdx: v1Idx, index: 0 },
+      { start: v1World, end: v2World, startIdx: v1Idx, endIdx: v2Idx, index: 1 },
+      { start: v2World, end: v0World, startIdx: v2Idx, endIdx: v0Idx, index: 2 },
+    ];
+  }
 
   edges.forEach(edge => {
     console.log(`[ProjectCut] Testing edge ${edge.index}: ${edge.start.toArray()} -> ${edge.end.toArray()}`);

@@ -25,6 +25,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     toggleVertexSelection,
     toggleEdgeSelection,
     toggleFaceSelection,
+    geometryVersion, // Sprint 10: Force re-render when geometry changes (knife cuts)
   } = useEditModeStore();
 
   // Track created geometries and materials for disposal
@@ -276,7 +277,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     });
 
     return <>{edges}</>;
-  }, [selectionMode, geometry, positions, selectedEdges, toggleEdgeSelection, sharedVertexGeometries, sharedMaterials, getCylinderGeometry]);
+  }, [selectionMode, geometry, positions, selectedEdges, toggleEdgeSelection, sharedVertexGeometries, sharedMaterials, getCylinderGeometry, geometryVersion]); // Sprint 10: Re-compute after knife cuts
 
   // Create face helpers
   const faceHelpers = useMemo(() => {
@@ -444,7 +445,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     geometriesRef.current.push(edgesGeo); // Track for disposal
 
     return edgesGeo;
-  }, [selectionMode, geometry, positions]);
+  }, [selectionMode, geometry, positions, geometryVersion]); // Sprint 10: Re-compute when geometry changes (knife cuts)
 
   // Add wireframe overlay for better face visibility in face mode
   const wireframeOverlay = useMemo(() => {

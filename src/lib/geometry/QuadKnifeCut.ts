@@ -38,7 +38,8 @@ export function cutQuadFace(
   newPositions: number[];
   newIndices: number[];
   cutVertexIndices: [number, number];
-  featureEdge: string; // Edge key to mark as feature
+  featureEdge: string; // Edge key to mark as feature (visible cut line)
+  diagonalEdges: string[]; // Edge keys of new quad diagonals (should be hidden)
 } {
   const index = geometry.index!;
   const positions = geometry.attributes.position;
@@ -98,7 +99,8 @@ export function cutQuadFace(
   const uniqueToFace1 = face1.find(v => !sharedVertices.includes(v));
   const uniqueToFace2 = face2.find(v => !sharedVertices.includes(v));
 
-  if (!uniqueToFace1 || !uniqueToFace2) {
+  // Sprint 10: Fix falsy value bug - vertex index 0 is valid!
+  if (uniqueToFace1 === undefined || uniqueToFace2 === undefined) {
     console.error('[QuadKnifeCut] Failed to find unique vertices!', {
       face1,
       face2,
@@ -143,7 +145,7 @@ export function cutQuadFace(
   newPositions.push(cut2.x, cut2.y, cut2.z);
   const cut2Idx = nextVertexIndex++;
 
-  // Rebuild ALL faces
+  // Rebuild ALL faces - cut quad is replaced, others copied
   const newIndices: number[] = [];
   const faceCount = index.count / 3;
   const processedFaces = new Set<number>([faceIndex, quadPair]);
@@ -167,15 +169,19 @@ export function cutQuadFace(
   // Quad 1: uniqueToFace1, cut1, cut2, diagonal1
   newIndices.push(uniqueToFace1, cut1Idx, cut2Idx);    // Triangle 1
   newIndices.push(uniqueToFace1, cut2Idx, diagonal1);  // Triangle 2
-  // These 2 triangles share edge uniqueToFace1-cut2 (diagonal - hidden)
+  // These 2 triangles share edge uniqueToFace1-cut2Idx (diagonal - MUST HIDE)
 
   // Quad 2: cut1, uniqueToFace2, diagonal2, cut2
   newIndices.push(cut1Idx, uniqueToFace2, diagonal2);  // Triangle 3
   newIndices.push(cut1Idx, diagonal2, cut2Idx);        // Triangle 4
-  // These 2 triangles share edge cut1-diagonal2 (diagonal - hidden)
+  // These 2 triangles share edge cut1Idx-diagonal2 (diagonal - MUST HIDE)
 
-  // Create feature edge key for the cut edge
+  // Create feature edge key for the cut edge (VISIBLE)
   const cutEdgeKey = makeEdgeKey(cut1Idx, cut2Idx);
+
+  // Create diagonal edge keys (HIDDEN - for quad detection)
+  const diagonal1Key = makeEdgeKey(uniqueToFace1, cut2Idx);
+  const diagonal2Key = makeEdgeKey(cut1Idx, diagonal2);
 
   // Validate geometry
   console.log('[QuadKnifeCut] Result validation:', {
@@ -184,6 +190,7 @@ export function cutQuadFace(
     originalFaces: faceCount,
     newFaces: newIndices.length / 3,
     cutEdge: cutEdgeKey,
+    diagonals: [diagonal1Key, diagonal2Key],
   });
 
   if (newIndices.length === 0 || newPositions.length === 0) {
@@ -191,12 +198,13 @@ export function cutQuadFace(
     throw new Error('Quad cut produced empty geometry');
   }
 
-  console.log('[QuadKnifeCut] Created 2 clean quads (4 triangles) - cut edge:', cutEdgeKey);
+  console.log(`[QuadKnifeCut] Created 2 clean quads (4 triangles)\n  ✓ Cut edge (visible): ${cutEdgeKey}\n  ✗ Diagonals (hidden): ${diagonal1Key}, ${diagonal2Key}`);
 
   return {
     newPositions,
     newIndices,
     cutVertexIndices: [cut1Idx, cut2Idx],
     featureEdge: cutEdgeKey, // Caller should add this to geometry.userData.featureEdges
+    diagonalEdges: [diagonal1Key, diagonal2Key], // Caller should ensure these are hidden
   };
 }

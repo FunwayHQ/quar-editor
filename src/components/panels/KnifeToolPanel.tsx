@@ -69,13 +69,14 @@ export function KnifeToolPanel() {
         if (quadPair !== null) {
           console.log(`[KnifeTool] Quad mode: Cutting quad (faces ${targetFaceIndex} + ${quadPair}) into 2 quads`);
 
-          // Project cut to find edge intersections
+          // Project cut to find edge intersections (quad-aware in quad mode)
           const edgeIntersections = projectCutOntoFace(
             drawingPath[0],
             drawingPath[1],
             targetFaceIndex,
             mesh.geometry,
-            mesh
+            mesh,
+            true // quadMode = true
           );
 
           if (edgeIntersections.length !== 2) {
@@ -105,23 +106,65 @@ export function KnifeToolPanel() {
             throw error; // Re-throw to trigger triangle mode fallback
           }
 
-          // Update geometry
-          mesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(result.newPositions, 3));
-          mesh.geometry.setIndex(new THREE.Uint32BufferAttribute(result.newIndices, 1));
-          mesh.geometry.computeVertexNormals();
-          mesh.geometry.computeBoundingBox();
-          mesh.geometry.computeBoundingSphere();
+          // Sprint 10: Update mesh.geometry directly (EditModeHelpers needs this!)
+          const oldGeometry = mesh.geometry;
+          const newGeometry = new THREE.BufferGeometry();
 
-          // Sprint Y: Mark cut edge as feature edge (always visible)
-          if (!mesh.geometry.userData) {
-            mesh.geometry.userData = {};
-          }
-          if (!mesh.geometry.userData.featureEdges) {
-            mesh.geometry.userData.featureEdges = [];
-          }
-          mesh.geometry.userData.featureEdges.push(result.featureEdge);
+          // Set attributes
+          newGeometry.setAttribute('position', new THREE.Float32BufferAttribute(result.newPositions, 3));
+          newGeometry.setIndex(new THREE.Uint32BufferAttribute(result.newIndices, 1));
+          newGeometry.computeVertexNormals();
+          newGeometry.computeBoundingBox();
+          newGeometry.computeBoundingSphere();
 
-          console.log('[KnifeTool] Quad cut complete - 1 quad → 2 quads, cut edge marked as feature:', result.featureEdge);
+          // Set userData with feature and hidden edges
+          newGeometry.userData = {
+            featureEdges: [result.featureEdge],
+            hiddenEdges: result.diagonalEdges,
+          };
+
+          // Update mesh geometry and registry
+          mesh.geometry = newGeometry;
+          meshRegistry.registerMesh(editingObjectId, mesh);
+          oldGeometry.dispose();
+
+          console.log(`[KnifeTool] Quad cut complete - 1 quad → 2 quads\n  ✓ Feature edge: ${result.featureEdge}\n  ✗ Hidden diagonals: ${result.diagonalEdges.join(', ')}`);
+
+          // Sprint 10: Save to store IMMEDIATELY to trigger SceneObject geometry useMemo re-run
+          const pos = newGeometry.attributes.position;
+          const normals = newGeometry.attributes.normal;
+
+          useObjectsStore.getState().updateObject(editingObjectId, {
+            geometry: {
+              data: {
+                attributes: {
+                  position: {
+                    array: Array.from(pos.array),
+                    itemSize: pos.itemSize,
+                  },
+                  normal: {
+                    array: Array.from(normals.array),
+                    itemSize: normals.itemSize,
+                  },
+                },
+                index: {
+                  array: Array.from(newGeometry.index!.array),
+                },
+                userData: newGeometry.userData,
+              },
+            },
+          });
+
+          // Increment version to force EditModeHelpers re-render
+          useEditModeStore.getState().incrementGeometryVersion();
+
+          // Switch to edge mode and clean up
+          setSelectionMode('edge');
+          confirmCut();
+          deactivateTool();
+
+          console.log('[KnifeTool] Geometry saved to store, switched to edge mode');
+          return; // Exit early
         } else {
           console.warn('[KnifeTool] No quad pair - falling back to triangle cut');
           // Fall through to triangle mode
@@ -154,16 +197,11 @@ export function KnifeToolPanel() {
         MeshOperations.knifeCut(mesh.geometry, cutIntersections);
       }
 
-      // Force update
-      mesh.geometry.attributes.position.needsUpdate = true;
-      if (mesh.geometry.index) mesh.geometry.index.needsUpdate = true;
-      if (mesh.geometry.attributes.normal) mesh.geometry.attributes.normal.needsUpdate = true;
-
-      // Sprint Y: Save geometry to store including feature edges metadata
-      const geometry = mesh.geometry;
+      // Sprint 10: Save NEW geometry to store (with feature edges + hidden edges metadata)
+      const geometry = mesh.geometry; // This is the NEW geometry now
       const pos = geometry.attributes.position;
       const normals = geometry.attributes.normal;
-      const uvs = geometry.attributes.uv;
+      const uvs = geometry.attributes.uv; // Will be undefined (no UVs after knife cut)
       const idx = geometry.index;
 
       const geometryData = {

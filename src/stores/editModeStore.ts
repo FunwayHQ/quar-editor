@@ -17,6 +17,10 @@ interface EditModeStore {
   editingObjectId: string | null;
   selectionMode: SelectionMode;
 
+  // Sprint 10: Geometry version for forcing re-renders after knife cuts
+  geometryVersion: number;
+  incrementGeometryVersion: () => void;
+
   // Sprint Y: Merged vertex mode (move connected vertices together)
   mergedVertexMode: boolean;
   setMergedVertexMode: (enabled: boolean) => void;
@@ -68,6 +72,10 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
   isEditMode: false,
   editingObjectId: null,
   selectionMode: 'vertex',
+
+  // Sprint 10: Geometry version counter (incremented after knife cuts to force re-render)
+  geometryVersion: 0,
+  incrementGeometryVersion: () => set((state) => ({ geometryVersion: state.geometryVersion + 1 })),
 
   // Sprint Y: Merged vertex mode (ON by default)
   mergedVertexMode: true,

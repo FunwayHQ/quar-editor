@@ -25,6 +25,11 @@ export function getQuadEdges(geometry: THREE.BufferGeometry): [number, number][]
     (geometry.userData?.featureEdges as string[]) || []
   );
 
+  // Sprint 10: Get explicitly hidden edges (quad cut diagonals, etc.)
+  const hiddenEdgeSet = new Set<string>(
+    (geometry.userData?.hiddenEdges as string[]) || []
+  );
+
   // Build edge map: edge key -> array of face indices that use this edge
   const edgeToFaces = new Map<string, number[]>();
 
@@ -47,6 +52,11 @@ export function getQuadEdges(geometry: THREE.BufferGeometry): [number, number][]
   edgeToFaces.forEach((faces, edgeKey) => {
     const [v0, v1] = parseEdgeKey(edgeKey);
 
+    // Sprint 10: Hidden edges are NEVER visible (quad cut diagonals, etc.)
+    if (hiddenEdgeSet.has(edgeKey)) {
+      return; // Skip this edge entirely
+    }
+
     // Sprint Y: Feature edges are ALWAYS visible (knife cuts, etc.)
     if (featureEdgeSet.has(edgeKey)) {
       quadEdges.push([v0, v1]);
@@ -65,7 +75,7 @@ export function getQuadEdges(geometry: THREE.BufferGeometry): [number, number][]
         // Real quad edge - keep it
         quadEdges.push([v0, v1]);
       }
-      // Skip diagonal edges (triangulation artifacts) UNLESS marked as feature
+      // else: Skip triangulation diagonal (isTriangulationDiagonal detected it)
     } else if (faces.length > 2) {
       // Non-manifold edge (shared by 3+ faces) - show it
       quadEdges.push([v0, v1]);
