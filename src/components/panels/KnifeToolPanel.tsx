@@ -117,10 +117,14 @@ export function KnifeToolPanel() {
           newGeometry.computeBoundingBox();
           newGeometry.computeBoundingSphere();
 
-          // Set userData with feature and hidden edges
+          // Preserve existing userData and accumulate edges from multiple cuts
+          const existingFeatureEdges = (oldGeometry.userData?.featureEdges as string[]) || [];
+          const existingHiddenEdges = (oldGeometry.userData?.hiddenEdges as string[]) || [];
+
           newGeometry.userData = {
-            featureEdges: [result.featureEdge],
-            hiddenEdges: result.diagonalEdges,
+            ...oldGeometry.userData, // Preserve other userData
+            featureEdges: [...existingFeatureEdges, result.featureEdge],
+            hiddenEdges: [...existingHiddenEdges, ...result.diagonalEdges],
           };
 
           // Update mesh geometry and registry

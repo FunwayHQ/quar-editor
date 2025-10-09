@@ -25,9 +25,43 @@ interface CutPoint {
  * 5. Copy all other faces unchanged
  * 6. Result: Clean quad topology, no diagonals through cut
  */
+
 // Helper: Create normalized edge key
 function makeEdgeKey(v0: number, v1: number): string {
   return v0 < v1 ? `${v0}-${v1}` : `${v1}-${v0}`;
+}
+
+// Helper: Find which edge a point lies on
+function findEdgeForPoint(
+  point: THREE.Vector3,
+  edges: Array<[number, number]>,
+  positions: THREE.BufferAttribute,
+  tolerance: number = 0.01
+): [number, number] | null {
+  for (const [v0, v1] of edges) {
+    const p0 = new THREE.Vector3().fromBufferAttribute(positions, v0);
+    const p1 = new THREE.Vector3().fromBufferAttribute(positions, v1);
+
+    // Check if point lies on the line segment v0-v1
+    const edge = new THREE.Vector3().subVectors(p1, p0);
+    const toPoint = new THREE.Vector3().subVectors(point, p0);
+    const edgeLength = edge.length();
+    edge.normalize();
+
+    const projection = toPoint.dot(edge);
+    if (projection < -tolerance || projection > edgeLength + tolerance) {
+      continue;
+    }
+
+    const projectedPoint = p0.clone().addScaledVector(edge, projection);
+    const distance = point.distanceTo(projectedPoint);
+
+    if (distance < tolerance) {
+      return [v0, v1];
+    }
+  }
+
+  return null;
 }
 
 export function cutQuadFace(
@@ -113,7 +147,6 @@ export function cutQuadFace(
   }
 
   // Quad corners: uniqueToFace1, sharedVertices[0], uniqueToFace2, sharedVertices[1]
-  // We need to order them properly to form a quad
   const [diagonal1, diagonal2] = sharedVertices;
 
   console.log('[QuadKnifeCut] Quad vertices:', {
@@ -145,6 +178,25 @@ export function cutQuadFace(
   newPositions.push(cut2.x, cut2.y, cut2.z);
   const cut2Idx = nextVertexIndex++;
 
+  // Build the quad's exterior edges (excluding the diagonal)
+  const quadEdges: Array<[number, number]> = [
+    [uniqueToFace1, diagonal1],
+    [diagonal1, uniqueToFace2],
+    [uniqueToFace2, diagonal2],
+    [diagonal2, uniqueToFace1],
+  ];
+
+  // Find which edges the cut points lie on
+  const cut1Edge = findEdgeForPoint(cut1, quadEdges, positions);
+  const cut2Edge = findEdgeForPoint(cut2, quadEdges, positions);
+
+  console.log('[QuadKnifeCut] Cut edges:', {
+    cut1Edge,
+    cut2Edge,
+    cut1: cut1.toArray(),
+    cut2: cut2.toArray(),
+  });
+
   // Rebuild ALL faces - skip cut quad, copy others, append 4 new triangles
   const newIndices: number[] = [];
   const faceCount = index.count / 3;
@@ -165,25 +217,114 @@ export function cutQuadFace(
     );
   }
 
-  // Sprint Y: Create clean 2 quads (4 triangles) - mark cut edge as FEATURE
-  // Quad 1: uniqueToFace1, cut1, cut2, diagonal1
-  newIndices.push(uniqueToFace1, cut1Idx, cut2Idx);    // Triangle 1
-  newIndices.push(uniqueToFace1, cut2Idx, diagonal1);  // Triangle 2
-  // These 2 triangles share edge uniqueToFace1-cut2Idx (diagonal - MUST HIDE)
+  // Create the new quads based on proper connectivity
+  // We need to preserve the original winding order
 
-  // Quad 2: cut1, uniqueToFace2, diagonal2, cut2
-  newIndices.push(cut1Idx, uniqueToFace2, diagonal2);  // Triangle 3
-  newIndices.push(cut1Idx, diagonal2, cut2Idx);        // Triangle 4
-  // These 2 triangles share edge cut1Idx-diagonal2 (diagonal - MUST HIDE)
+  // Get the original face normal to determine proper winding
+  const v0 = new THREE.Vector3().fromBufferAttribute(positions, face1[0]);
+  const v1 = new THREE.Vector3().fromBufferAttribute(positions, face1[1]);
+  const v2 = new THREE.Vector3().fromBufferAttribute(positions, face1[2]);
 
-  // Create feature edge key for the cut edge (VISIBLE)
+  const edge1 = new THREE.Vector3().subVectors(v1, v0);
+  const edge2 = new THREE.Vector3().subVectors(v2, v0);
+  const originalNormal = new THREE.Vector3().crossVectors(edge1, edge2);
+  originalNormal.normalize();
+
+  // Helper function to check triangle winding
+  const createTriangleWithCorrectWinding = (
+    a: number,
+    b: number,
+    c: number
+  ): number[] => {
+    // Get positions of the three vertices
+    const pa = new THREE.Vector3().fromBufferAttribute(positions, a);
+    const pb = new THREE.Vector3().fromBufferAttribute(positions, b);
+    const pc = new THREE.Vector3().fromBufferAttribute(positions, c);
+
+    // Calculate normal for this ordering
+    const e1 = new THREE.Vector3().subVectors(pb, pa);
+    const e2 = new THREE.Vector3().subVectors(pc, pa);
+    const testNormal = new THREE.Vector3().crossVectors(e1, e2);
+    testNormal.normalize();
+
+    // If the normal points in the opposite direction, flip the winding
+    if (testNormal.dot(originalNormal) < 0) {
+      return [a, c, b]; // Flipped winding
+    }
+    return [a, b, c]; // Original winding
+  };
+
+  // Determine the connectivity of the new quads
+  // The cut creates 2 new quads from the original quad
+
+  // First, we need to figure out which vertices form each new quad
+  // The cut splits the quad along cut1-cut2 line
+
+  // Quad 1: Contains uniqueToFace1
+  // Find which diagonal vertex is on the same side as uniqueToFace1
+  let quad1Vertices: number[];
+  let quad2Vertices: number[];
+
+  // Determine which edges the cut points lie on to understand the split
+  if (cut1Edge && cut2Edge) {
+    // Check if the cut goes from one side to the opposite side
+    const cut1HasUnique1 = cut1Edge.includes(uniqueToFace1);
+    const cut2HasUnique1 = cut2Edge.includes(uniqueToFace1);
+
+    if (cut1HasUnique1 && cut2HasUnique1) {
+      // Both cuts are on edges connected to uniqueToFace1
+      // Quad 1: uniqueToFace1, cut1, cut2, and the diagonal between them
+      quad1Vertices = [uniqueToFace1, cut1Idx, cut2Idx, diagonal1];
+      quad2Vertices = [uniqueToFace2, diagonal1, diagonal2, cut1Idx];
+    } else if (!cut1HasUnique1 && !cut2HasUnique1) {
+      // Both cuts are on edges connected to uniqueToFace2
+      quad1Vertices = [uniqueToFace1, diagonal1, diagonal2, cut1Idx];
+      quad2Vertices = [uniqueToFace2, cut1Idx, cut2Idx, diagonal2];
+    } else {
+      // Standard case: cut goes across the quad
+      // One cut is closer to uniqueToFace1, the other to uniqueToFace2
+      quad1Vertices = [uniqueToFace1, diagonal1, cut1Idx, cut2Idx];
+      quad2Vertices = [uniqueToFace2, cut2Idx, cut1Idx, diagonal2];
+    }
+  } else {
+    // Fallback: standard quad split
+    quad1Vertices = [uniqueToFace1, diagonal1, cut1Idx, cut2Idx];
+    quad2Vertices = [uniqueToFace2, cut2Idx, cut1Idx, diagonal2];
+  }
+
+  // Create triangles for each quad with correct winding
+  // Each quad needs 2 triangles
+
+  // Quad 1 triangulation
+  const newQuad1Triangle1 = createTriangleWithCorrectWinding(
+    quad1Vertices[0], quad1Vertices[1], quad1Vertices[2]
+  );
+  const newQuad1Triangle2 = createTriangleWithCorrectWinding(
+    quad1Vertices[0], quad1Vertices[2], quad1Vertices[3]
+  );
+
+  // Quad 2 triangulation
+  const newQuad2Triangle1 = createTriangleWithCorrectWinding(
+    quad2Vertices[0], quad2Vertices[1], quad2Vertices[2]
+  );
+  const newQuad2Triangle2 = createTriangleWithCorrectWinding(
+    quad2Vertices[0], quad2Vertices[2], quad2Vertices[3]
+  );
+
+  // Add the new triangles
+  newIndices.push(...newQuad1Triangle1);
+  newIndices.push(...newQuad1Triangle2);
+  newIndices.push(...newQuad2Triangle1);
+  newIndices.push(...newQuad2Triangle2);
+
+  // Create edge keys for marking
   const cutEdgeKey = makeEdgeKey(cut1Idx, cut2Idx);
 
-  // Sprint 10: Mark the NEW quad diagonals as hidden
-  // Quad 1 (faces at indices faceCount-4, faceCount-3): diagonal = uniqueToFace1-cut2Idx
-  // Quad 2 (faces at indices faceCount-2, faceCount-1): diagonal = cut1Idx-diagonal2
-  const diagonal1Key = makeEdgeKey(uniqueToFace1, cut2Idx);
-  const diagonal2Key = makeEdgeKey(cut1Idx, diagonal2);
+  // The diagonals for the new quads (these should be hidden)
+  // Quad 1 diagonal: connects vertices 0 and 2 of the quad
+  const diagonal1Key = makeEdgeKey(quad1Vertices[0], quad1Vertices[2]);
+  // Quad 2 diagonal: connects vertices 0 and 2 of the quad
+  const diagonal2Key = makeEdgeKey(quad2Vertices[0], quad2Vertices[2]);
 
   const newFaceCount = newIndices.length / 3;
   const maxVertexIndex = Math.max(...newIndices);
