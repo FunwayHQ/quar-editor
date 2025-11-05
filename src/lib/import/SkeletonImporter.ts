@@ -302,7 +302,6 @@ export class SkeletonImporter {
     boneIdMap: Map<THREE.Bone, string>,
     skeleton: THREE.Skeleton
   ): Animation[] {
-    const animationStore = useAnimationStore.getState();
     const importedAnimations: Animation[] = [];
 
     console.log('[SkeletonImporter] Importing', clips.length, 'animation clips');
@@ -319,8 +318,8 @@ export class SkeletonImporter {
     clips.forEach(clip => {
       console.log('[SkeletonImporter] Processing animation:', clip.name, 'duration:', clip.duration);
 
-      // Create animation
-      const animation = animationStore.createAnimation(clip.name || 'Imported Animation', clip.duration);
+      // Build tracks array locally
+      const tracks: AnimationTrack[] = [];
 
       // Process each track in the clip
       clip.tracks.forEach(track => {
@@ -428,14 +427,26 @@ export class SkeletonImporter {
           space: 'local',
         };
 
-        // Add track to animation
-        animationStore.addTrack(animation.id, animTrack);
+        tracks.push(animTrack);
 
         console.log('[SkeletonImporter] Created track for bone:', boneName, propertyType, 'with', keyframes.length, 'keyframes');
       });
 
+      // Create animation object with all tracks
+      const now = Date.now();
+      const animation: Animation = {
+        id: `anim_${now}_${Math.random().toString(36).substr(2, 9)}`,
+        name: clip.name || 'Imported Animation',
+        duration: clip.duration,
+        tracks,
+        loop: false,
+        enabled: true,
+        createdAt: now,
+        modifiedAt: now,
+      };
+
       importedAnimations.push(animation);
-      console.log('[SkeletonImporter] Imported animation:', animation.name);
+      console.log('[SkeletonImporter] Imported animation:', animation.name, 'with', tracks.length, 'tracks');
     });
 
     return importedAnimations;
