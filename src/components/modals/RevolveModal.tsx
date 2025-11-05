@@ -4,7 +4,7 @@
  * Modal for configuring revolve/lathe operation parameters.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useMeshOperationsStore, RevolveOptions } from '../../stores/meshOperationsStore';
 import { useCurveStore } from '../../stores/curveStore';
@@ -28,7 +28,7 @@ export function RevolveModal({ curveId, onClose }: RevolveModalProps) {
   const clearPreview = usePreviewStore((state) => state.clearPreview);
 
   const [localOptions, setLocalOptions] = useState<RevolveOptions>(revolveOptions);
-  const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const debounceTimerRef = useRef<number>();
 
   if (!curve) {
     onClose();

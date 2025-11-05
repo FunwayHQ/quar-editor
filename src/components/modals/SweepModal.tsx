@@ -34,7 +34,7 @@ export function SweepModal({ curveIds, onClose }: SweepModalProps) {
     ...sweepOptions,
     pathId: curveIds[1]
   });
-  const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const debounceTimerRef = useRef<number>();
 
   // Get curves dynamically (will update when profileId/pathId change)
   const profile = React.useMemo(() => {

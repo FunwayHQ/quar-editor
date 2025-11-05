@@ -4,7 +4,7 @@
  * Modal for configuring loft operation - interpolate between multiple curves.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMeshOperationsStore, LoftOptions } from '../../stores/meshOperationsStore';
 import { useCurveStore } from '../../stores/curveStore';
@@ -33,7 +33,7 @@ export function LoftModal({ curveIds, onClose }: LoftModalProps) {
     ...loftOptions,
     curveIds: curveIds
   });
-  const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const debounceTimerRef = useRef<number>();
 
   if (curveIds.length < 2) {
     onClose();
