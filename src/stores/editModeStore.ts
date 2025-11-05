@@ -4,12 +4,11 @@
  * Manages polygon editing state (vertex/edge/face selection).
  * Sprint 7: Export System + Polygon Editing MVP
  * Sprint Y: Smart quad selection
+ * REFACTORED: Now uses QMesh string IDs instead of numeric indices
  */
 
 import { create } from 'zustand';
 import { SelectionMode } from '../types/polygon';
-import { findQuadPair } from '../lib/geometry/QuadDetection';
-import { meshRegistry } from '../lib/mesh/MeshRegistry';
 
 interface EditModeStore {
   // Edit mode state
@@ -25,33 +24,33 @@ interface EditModeStore {
   mergedVertexMode: boolean;
   setMergedVertexMode: (enabled: boolean) => void;
 
-  // Selection sets
-  selectedVertices: Set<number>;
-  selectedEdges: Set<string>; // Format: "v1-v2" (sorted, e.g., "3-5")
-  selectedFaces: Set<number>;
+  // Selection sets (NOW USING STRING IDs from QMesh)
+  selectedVertices: Set<string>; // QVertex IDs
+  selectedEdges: Set<string>;    // Format: "vertexId1-vertexId2" (sorted)
+  selectedFaces: Set<string>;    // QFace IDs
 
   // Mode management
   enterEditMode: (objectId: string) => void;
   exitEditMode: () => void;
   setSelectionMode: (mode: SelectionMode) => void;
 
-  // Vertex selection
-  toggleVertexSelection: (index: number, multiSelect: boolean) => void;
-  selectVertex: (index: number, multiSelect: boolean) => void;
-  deselectVertex: (index: number) => void;
-  selectAllVertices: (vertexCount: number) => void;
+  // Vertex selection (NOW USES STRING IDs)
+  toggleVertexSelection: (vertexId: string, multiSelect: boolean) => void;
+  selectVertex: (vertexId: string, multiSelect: boolean) => void;
+  deselectVertex: (vertexId: string) => void;
+  selectAllVertices: (vertexIds: string[]) => void;
 
-  // Edge selection
-  toggleEdgeSelection: (v1: number, v2: number, multiSelect: boolean) => void;
-  selectEdge: (v1: number, v2: number, multiSelect: boolean) => void;
-  deselectEdge: (v1: number, v2: number) => void;
+  // Edge selection (NOW USES STRING IDs)
+  toggleEdgeSelection: (v1Id: string, v2Id: string, multiSelect: boolean) => void;
+  selectEdge: (v1Id: string, v2Id: string, multiSelect: boolean) => void;
+  deselectEdge: (v1Id: string, v2Id: string) => void;
   selectAllEdges: (edges: string[]) => void;
 
-  // Face selection
-  toggleFaceSelection: (index: number, multiSelect: boolean) => void;
-  selectFace: (index: number, multiSelect: boolean) => void;
-  deselectFace: (index: number) => void;
-  selectAllFaces: (faceCount: number) => void;
+  // Face selection (NOW USES STRING IDs - NO MORE QUAD PAIRING NEEDED)
+  toggleFaceSelection: (faceId: string, multiSelect: boolean) => void;
+  selectFace: (faceId: string, multiSelect: boolean) => void;
+  deselectFace: (faceId: string) => void;
+  selectAllFaces: (faceIds: string[]) => void;
 
   // Clear selection
   clearSelection: () => void;
@@ -63,8 +62,8 @@ interface EditModeStore {
 }
 
 // Helper to create edge key (always sorted)
-export function makeEdgeKey(v1: number, v2: number): string {
-  return v1 < v2 ? `${v1}-${v2}` : `${v2}-${v1}`;
+export function makeEdgeKey(v1Id: string, v2Id: string): string {
+  return v1Id < v2Id ? `${v1Id}-${v2Id}` : `${v2Id}-${v1Id}`;
 }
 
 export const useEditModeStore = create<EditModeStore>((set, get) => ({
@@ -126,41 +125,41 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
     selectedFaces: new Set(),
   }),
 
-  // Vertex selection
-  toggleVertexSelection: (index, multiSelect) => set((state) => {
+  // Vertex selection (REFACTORED for string IDs)
+  toggleVertexSelection: (vertexId, multiSelect) => set((state) => {
     const newSelected = new Set(state.selectedVertices);
 
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
+    if (newSelected.has(vertexId)) {
+      newSelected.delete(vertexId);
     } else {
       if (!multiSelect) {
         newSelected.clear();
       }
-      newSelected.add(index);
+      newSelected.add(vertexId);
     }
 
     return { selectedVertices: newSelected };
   }),
 
-  selectVertex: (index, multiSelect) => set((state) => {
-    const newSelected = multiSelect ? new Set(state.selectedVertices) : new Set<number>();
-    newSelected.add(index);
+  selectVertex: (vertexId, multiSelect) => set((state) => {
+    const newSelected = multiSelect ? new Set(state.selectedVertices) : new Set<string>();
+    newSelected.add(vertexId);
     return { selectedVertices: newSelected };
   }),
 
-  deselectVertex: (index) => set((state) => {
+  deselectVertex: (vertexId) => set((state) => {
     const newSelected = new Set(state.selectedVertices);
-    newSelected.delete(index);
+    newSelected.delete(vertexId);
     return { selectedVertices: newSelected };
   }),
 
-  selectAllVertices: (vertexCount) => set({
-    selectedVertices: new Set(Array.from({ length: vertexCount }, (_, i) => i)),
+  selectAllVertices: (vertexIds) => set({
+    selectedVertices: new Set(vertexIds),
   }),
 
-  // Edge selection
-  toggleEdgeSelection: (v1, v2, multiSelect) => set((state) => {
-    const key = makeEdgeKey(v1, v2);
+  // Edge selection (REFACTORED for string IDs)
+  toggleEdgeSelection: (v1Id, v2Id, multiSelect) => set((state) => {
+    const key = makeEdgeKey(v1Id, v2Id);
     const newSelected = new Set(state.selectedEdges);
 
     if (newSelected.has(key)) {
@@ -175,15 +174,15 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
     return { selectedEdges: newSelected };
   }),
 
-  selectEdge: (v1, v2, multiSelect) => set((state) => {
-    const key = makeEdgeKey(v1, v2);
+  selectEdge: (v1Id, v2Id, multiSelect) => set((state) => {
+    const key = makeEdgeKey(v1Id, v2Id);
     const newSelected = multiSelect ? new Set(state.selectedEdges) : new Set<string>();
     newSelected.add(key);
     return { selectedEdges: newSelected };
   }),
 
-  deselectEdge: (v1, v2) => set((state) => {
-    const key = makeEdgeKey(v1, v2);
+  deselectEdge: (v1Id, v2Id) => set((state) => {
+    const key = makeEdgeKey(v1Id, v2Id);
     const newSelected = new Set(state.selectedEdges);
     newSelected.delete(key);
     return { selectedEdges: newSelected };
@@ -193,85 +192,36 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
     selectedEdges: new Set(edges),
   }),
 
-  // Face selection
-  toggleFaceSelection: (index, multiSelect) => set((state) => {
+  // Face selection (REFACTORED - NO QUAD PAIRING NEEDED, QMesh handles quads natively!)
+  toggleFaceSelection: (faceId, multiSelect) => set((state) => {
     const newSelected = new Set(state.selectedFaces);
 
-    if (newSelected.has(index)) {
-      // Deselect: Remove this face and its quad pair
-      newSelected.delete(index);
-
-      // Sprint Y: Also remove quad pair if it exists
-      if (state.editingObjectId) {
-        const mesh = meshRegistry.getMesh(state.editingObjectId);
-        if (mesh?.geometry) {
-          const pairIdx = findQuadPair(index, mesh.geometry);
-          if (pairIdx !== null) {
-            newSelected.delete(pairIdx);
-          }
-        }
-      }
+    if (newSelected.has(faceId)) {
+      newSelected.delete(faceId);
     } else {
-      // Select: Add this face
       if (!multiSelect) {
         newSelected.clear();
       }
-      newSelected.add(index);
-
-      // Sprint Y: Auto-select quad pair for intuitive quad selection
-      if (state.editingObjectId) {
-        const mesh = meshRegistry.getMesh(state.editingObjectId);
-        if (mesh?.geometry) {
-          const pairIdx = findQuadPair(index, mesh.geometry);
-          if (pairIdx !== null) {
-            newSelected.add(pairIdx);
-            console.log(`[EditMode] Auto-selected quad pair: face ${index} + face ${pairIdx}`);
-          }
-        }
-      }
+      newSelected.add(faceId);
     }
 
     return { selectedFaces: newSelected };
   }),
 
-  selectFace: (index, multiSelect) => set((state) => {
-    const newSelected = multiSelect ? new Set(state.selectedFaces) : new Set<number>();
-    newSelected.add(index);
-
-    // Sprint Y: Auto-select quad pair
-    if (state.editingObjectId) {
-      const mesh = meshRegistry.getMesh(state.editingObjectId);
-      if (mesh?.geometry) {
-        const pairIdx = findQuadPair(index, mesh.geometry);
-        if (pairIdx !== null) {
-          newSelected.add(pairIdx);
-        }
-      }
-    }
-
+  selectFace: (faceId, multiSelect) => set((state) => {
+    const newSelected = multiSelect ? new Set(state.selectedFaces) : new Set<string>();
+    newSelected.add(faceId);
     return { selectedFaces: newSelected };
   }),
 
-  deselectFace: (index) => set((state) => {
+  deselectFace: (faceId) => set((state) => {
     const newSelected = new Set(state.selectedFaces);
-    newSelected.delete(index);
-
-    // Sprint Y: Also deselect quad pair
-    if (state.editingObjectId) {
-      const mesh = meshRegistry.getMesh(state.editingObjectId);
-      if (mesh?.geometry) {
-        const pairIdx = findQuadPair(index, mesh.geometry);
-        if (pairIdx !== null) {
-          newSelected.delete(pairIdx);
-        }
-      }
-    }
-
+    newSelected.delete(faceId);
     return { selectedFaces: newSelected };
   }),
 
-  selectAllFaces: (faceCount) => set({
-    selectedFaces: new Set(Array.from({ length: faceCount }, (_, i) => i)),
+  selectAllFaces: (faceIds) => set({
+    selectedFaces: new Set(faceIds),
   }),
 
   // Clear selection

@@ -154,9 +154,15 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
   // Create geometry based on object type
   const geometry = useMemo(() => {
-    // PRIORITY 1: Check if we have saved geometry data (from edit mode modifications)
+    // PRIORITY 1: NEW QMesh Architecture - Use renderGeometry if it exists
+    if (object.renderGeometry) {
+      console.log(`[SceneObject] Using QMesh renderGeometry for ${object.name}`);
+      return object.renderGeometry;
+    }
+
+    // PRIORITY 2: DEPRECATED - Check if we have old saved geometry data (for backward compatibility)
     if (object.geometry?.data) {
-      console.log(`[SceneObject] Restoring saved geometry for ${object.name}`);
+      console.log(`[SceneObject] Restoring saved geometry for ${object.name} (DEPRECATED)`);
       const geo = new THREE.BufferGeometry();
       const data = object.geometry.data;
 
@@ -285,7 +291,23 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       default:
         return new THREE.BoxGeometry(1, 1, 1);
     }
-  }, [object.type, object.geometryParams, object.importedGeometry, object.geometry]);
+  }, [object.type, object.geometryParams, object.importedGeometry, object.geometry, object.renderGeometry]);
+
+  // NEW: Initialize QMesh for objects that don't have it yet
+  const initializeGeometryFromBufferGeometry = useObjectsStore(
+    (state) => state.initializeGeometryFromBufferGeometry
+  );
+
+  useEffect(() => {
+    // Only initialize if:
+    // 1. We have geometry (created above)
+    // 2. We don't have QMesh yet
+    // 3. This is not a light or group (they don't have editable geometry)
+    if (geometry && !object.qMesh && !isLight && object.type !== 'group') {
+      console.log(`[SceneObject] Initializing QMesh for ${object.name}`);
+      initializeGeometryFromBufferGeometry(object.id, geometry);
+    }
+  }, [object.id, object.qMesh, geometry, isLight, object.type, initializeGeometryFromBufferGeometry]);
 
   // Memoize material color separately to prevent full material recreation
   const materialColor = useMemo(() => {
