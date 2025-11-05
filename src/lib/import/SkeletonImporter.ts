@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { useBoneStore } from '../../stores/boneStore';
 import { useObjectsStore, BonePose } from '../../stores/objectsStore';
+import { useAnimationStore, Animation, AnimationTrack, Keyframe, InterpolationType } from '../../stores/animationStore';
 
 export interface BoneImportResult {
   armatureId: string;
@@ -290,5 +291,153 @@ export class SkeletonImporter {
     );
 
     return rootBone || bones[0];
+  }
+
+  /**
+   * Import animations from THREE.js AnimationClips
+   * Converts GLTF/GLB animations to our Animation format
+   */
+  static importAnimations(
+    clips: THREE.AnimationClip[],
+    boneIdMap: Map<THREE.Bone, string>,
+    skeleton: THREE.Skeleton
+  ): Animation[] {
+    const animationStore = useAnimationStore.getState();
+    const importedAnimations: Animation[] = [];
+
+    console.log('[SkeletonImporter] Importing', clips.length, 'animation clips');
+
+    // Create a map from bone name to bone ID for faster lookups
+    const boneNameToId = new Map<string, string>();
+    skeleton.bones.forEach(threeBone => {
+      const boneId = boneIdMap.get(threeBone);
+      if (boneId && threeBone.name) {
+        boneNameToId.set(threeBone.name, boneId);
+      }
+    });
+
+    clips.forEach(clip => {
+      console.log('[SkeletonImporter] Processing animation:', clip.name, 'duration:', clip.duration);
+
+      // Create animation
+      const animation = animationStore.createAnimation(clip.name || 'Imported Animation', clip.duration);
+
+      // Process each track in the clip
+      clip.tracks.forEach(track => {
+        // Parse track name to extract bone name and property
+        // Track names are typically in format: ".bones[BoneName].position" or "BoneName.quaternion"
+        const trackName = track.name;
+        let boneName: string | null = null;
+        let propertyType: 'position' | 'rotation' | 'scale' | null = null;
+
+        // Try to extract bone name from various formats
+        const bonesMatch = trackName.match(/\.bones\[([^\]]+)\]\.(\w+)/);
+        const directMatch = trackName.match(/([^.]+)\.(\w+)/);
+
+        if (bonesMatch) {
+          boneName = bonesMatch[1];
+          const prop = bonesMatch[2];
+          if (prop === 'position') propertyType = 'position';
+          else if (prop === 'quaternion' || prop === 'rotation') propertyType = 'rotation';
+          else if (prop === 'scale') propertyType = 'scale';
+        } else if (directMatch) {
+          boneName = directMatch[1];
+          const prop = directMatch[2];
+          if (prop === 'position') propertyType = 'position';
+          else if (prop === 'quaternion' || prop === 'rotation') propertyType = 'rotation';
+          else if (prop === 'scale') propertyType = 'scale';
+        }
+
+        if (!boneName || !propertyType) {
+          console.warn('[SkeletonImporter] Could not parse track name:', trackName);
+          return;
+        }
+
+        // Get bone ID from name
+        const boneId = boneNameToId.get(boneName);
+        if (!boneId) {
+          console.warn('[SkeletonImporter] Could not find bone for track:', boneName);
+          return;
+        }
+
+        // Determine interpolation type
+        let interpolation: InterpolationType = 'linear';
+        if (track.getInterpolation) {
+          const threeInterpolation = track.getInterpolation();
+          if (threeInterpolation === THREE.InterpolateDiscrete) {
+            interpolation = 'step';
+          } else if (threeInterpolation === THREE.InterpolateLinear) {
+            interpolation = 'linear';
+          }
+          // THREE.InterpolateSmooth could map to 'bezier', but we'll use linear for now
+        }
+
+        // Extract keyframes from track
+        const times = track.times;
+        const values = track.values;
+        const valueSize = track.getValueSize(); // 3 for position/scale, 4 for quaternion
+
+        const keyframes: Keyframe[] = [];
+
+        for (let i = 0; i < times.length; i++) {
+          const time = times[i];
+          const startIdx = i * valueSize;
+
+          let value: any;
+          if (propertyType === 'rotation' && valueSize === 4) {
+            // Quaternion
+            value = [
+              values[startIdx],
+              values[startIdx + 1],
+              values[startIdx + 2],
+              values[startIdx + 3],
+            ];
+          } else if (valueSize === 3) {
+            // Vector3 (position or scale)
+            value = [
+              values[startIdx],
+              values[startIdx + 1],
+              values[startIdx + 2],
+            ];
+          } else {
+            console.warn('[SkeletonImporter] Unexpected value size:', valueSize);
+            continue;
+          }
+
+          const keyframe: Keyframe = {
+            id: `kf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            time,
+            value,
+            interpolation,
+            space: 'local', // GLTF animations are typically in local space
+          };
+
+          keyframes.push(keyframe);
+        }
+
+        // Create animation track
+        const animTrack: AnimationTrack = {
+          id: `track_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          objectId: boneId,
+          property: 'boneTransform',
+          propertyPath: ['boneTransform', propertyType],
+          keyframes,
+          enabled: true,
+          boneId,
+          transformType: propertyType,
+          space: 'local',
+        };
+
+        // Add track to animation
+        animationStore.addTrack(animation.id, animTrack);
+
+        console.log('[SkeletonImporter] Created track for bone:', boneName, propertyType, 'with', keyframes.length, 'keyframes');
+      });
+
+      importedAnimations.push(animation);
+      console.log('[SkeletonImporter] Imported animation:', animation.name);
+    });
+
+    return importedAnimations;
   }
 }

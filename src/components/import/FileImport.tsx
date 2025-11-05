@@ -118,6 +118,17 @@ export function FileImport() {
               file.name.replace(/\.(glb|gltf)$/i, '')
             );
             console.log('[FileImport] Imported skeleton with armature:', boneImportResult.armatureId);
+
+            // Import animations if present
+            if (gltf.animations && gltf.animations.length > 0) {
+              console.log('[FileImport] Found', gltf.animations.length, 'animations in GLTF');
+              const importedAnimations = SkeletonImporter.importAnimations(
+                gltf.animations,
+                boneImportResult.boneIdMap,
+                skinnedMesh.skeleton
+              );
+              console.log('[FileImport] Imported', importedAnimations.length, 'animations');
+            }
           }
 
           // PASS 1: Create all objects and build ID map
