@@ -116,6 +116,55 @@ function calculateBoneLength(
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
+// Helper to build vertex adjacency map (which vertices are connected by edges)
+function buildVertexAdjacency(geometry: {
+  vertices: number[];
+  indices?: number[];
+}): Map<number, Set<number>> {
+  const adjacency = new Map<number, Set<number>>();
+  const vertexCount = geometry.vertices.length / 3;
+
+  // Initialize adjacency sets for all vertices
+  for (let i = 0; i < vertexCount; i++) {
+    adjacency.set(i, new Set());
+  }
+
+  if (geometry.indices && geometry.indices.length > 0) {
+    // Use indices to build adjacency (triangulated mesh)
+    for (let i = 0; i < geometry.indices.length; i += 3) {
+      const v0 = geometry.indices[i];
+      const v1 = geometry.indices[i + 1];
+      const v2 = geometry.indices[i + 2];
+
+      // Add bidirectional edges for each triangle
+      adjacency.get(v0)?.add(v1);
+      adjacency.get(v0)?.add(v2);
+      adjacency.get(v1)?.add(v0);
+      adjacency.get(v1)?.add(v2);
+      adjacency.get(v2)?.add(v0);
+      adjacency.get(v2)?.add(v1);
+    }
+  } else {
+    // No indices, assume sequential triangles
+    for (let i = 0; i < vertexCount; i += 3) {
+      if (i + 2 < vertexCount) {
+        const v0 = i;
+        const v1 = i + 1;
+        const v2 = i + 2;
+
+        adjacency.get(v0)?.add(v1);
+        adjacency.get(v0)?.add(v2);
+        adjacency.get(v1)?.add(v0);
+        adjacency.get(v1)?.add(v2);
+        adjacency.get(v2)?.add(v0);
+        adjacency.get(v2)?.add(v1);
+      }
+    }
+  }
+
+  return adjacency;
+}
+
 export const useBoneStore = create<BoneState>((set, get) => ({
   // Initial state
   isPoseMode: false,
@@ -804,9 +853,93 @@ export const useBoneStore = create<BoneState>((set, get) => ({
     console.log('[BoneStore] Normalized weights for mesh:', meshId);
   },
 
-  smoothWeights: (_meshId: string, _vertexIndices: number[], _iterations = 1) => {
-    console.log('[BoneStore] Smooth weights not yet implemented');
-    // TODO: Implement weight smoothing
+  smoothWeights: (meshId: string, vertexIndices: number[], iterations = 1) => {
+    const objectsStore = useObjectsStore.getState();
+    const mesh = objectsStore.objects.get(meshId);
+
+    if (!mesh || !mesh.skinData || !mesh.importedGeometry) {
+      console.warn('[BoneStore] Cannot smooth weights: invalid mesh');
+      return;
+    }
+
+    console.log('[BoneStore] Smoothing weights for', vertexIndices.length, 'vertices,', iterations, 'iterations');
+
+    // Build adjacency map (which vertices are connected to which)
+    const adjacency = buildVertexAdjacency(mesh.importedGeometry);
+
+    // Perform smoothing iterations
+    let currentWeights = new Map<number, BoneInfluence[]>(mesh.skinData.weights);
+
+    for (let iter = 0; iter < iterations; iter++) {
+      const smoothedWeights = new Map<number, BoneInfluence[]>();
+
+      vertexIndices.forEach(vertexIdx => {
+        const neighbors = adjacency.get(vertexIdx) || [];
+        if (neighbors.length === 0) {
+          // No neighbors, keep current weights
+          smoothedWeights.set(vertexIdx, currentWeights.get(vertexIdx) || []);
+          return;
+        }
+
+        // Collect all bone influences from this vertex and neighbors
+        const boneWeights = new Map<string, number[]>();
+
+        // Add current vertex weights
+        const currentInfluences = currentWeights.get(vertexIdx) || [];
+        currentInfluences.forEach(inf => {
+          if (!boneWeights.has(inf.boneId)) {
+            boneWeights.set(inf.boneId, []);
+          }
+          boneWeights.get(inf.boneId)!.push(inf.weight);
+        });
+
+        // Add neighbor weights
+        neighbors.forEach(neighborIdx => {
+          const neighborInfluences = currentWeights.get(neighborIdx) || [];
+          neighborInfluences.forEach(inf => {
+            if (!boneWeights.has(inf.boneId)) {
+              boneWeights.set(inf.boneId, []);
+            }
+            boneWeights.get(inf.boneId)!.push(inf.weight);
+          });
+        });
+
+        // Average weights for each bone
+        const averagedInfluences: BoneInfluence[] = [];
+        boneWeights.forEach((weights, boneId) => {
+          const avgWeight = weights.reduce((sum, w) => sum + w, 0) / weights.length;
+          if (avgWeight > 0.001) {  // Filter out negligible weights
+            averagedInfluences.push({ boneId, weight: avgWeight });
+          }
+        });
+
+        // Normalize to sum to 1.0
+        const totalWeight = averagedInfluences.reduce((sum, inf) => sum + inf.weight, 0);
+        if (totalWeight > 0) {
+          averagedInfluences.forEach(inf => {
+            inf.weight /= totalWeight;
+          });
+        }
+
+        smoothedWeights.set(vertexIdx, averagedInfluences);
+      });
+
+      // Update current weights for next iteration
+      smoothedWeights.forEach((influences, vertexIdx) => {
+        currentWeights.set(vertexIdx, influences);
+      });
+    }
+
+    // Apply smoothed weights back to mesh
+    objectsStore.updateObject(meshId, {
+      skinData: {
+        ...mesh.skinData,
+        weights: currentWeights,
+      },
+      modifiedAt: Date.now(),
+    });
+
+    console.log('[BoneStore] Weight smoothing complete');
   },
 
   // Helper functions
