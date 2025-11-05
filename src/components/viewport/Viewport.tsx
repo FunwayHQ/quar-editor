@@ -27,6 +27,7 @@ import { CurveRenderer } from './CurveRenderer';
 import { PreviewMeshRenderer } from './PreviewMeshRenderer';
 import { PoseModeToolbar } from './PoseModeToolbar';
 import { WeightPaintToolbar } from './WeightPaintToolbar';
+import { WeightVisualization } from './WeightVisualization';
 import { useCameraPresets } from './CameraPresets';
 import * as THREE from 'three';
 import { useEffect } from 'react';
@@ -219,6 +220,9 @@ function Scene() {
 
       {/* Knife Tool Visuals */}
       <KnifeToolVisuals />
+
+      {/* Weight Paint Visualization */}
+      <WeightVisualization />
 
       {/* FPS Counter - tracks scene stats */}
       <FPSCounter />
