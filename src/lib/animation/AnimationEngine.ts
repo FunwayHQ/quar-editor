@@ -9,6 +9,7 @@ import { Animation, AnimationTrack, Keyframe } from '../../stores/animationStore
 import { getValueAtTime } from './Interpolators';
 import { useObjectsStore } from '../../stores/objectsStore';
 import { useMorphTargetStore } from '../../stores/morphTargetStore';
+import { useBoneStore } from '../../stores/boneStore';
 
 /**
  * Animation Engine - Handles playback and property updates
@@ -113,7 +114,25 @@ export class AnimationEngine {
       if (track.property === 'shapeKey' && track.shapeKeyId) {
         const morphStore = useMorphTargetStore.getState();
         morphStore.setShapeKeyValue(track.shapeKeyId, value);
-      } else {
+      }
+      // Handle bone transform tracks
+      else if (track.property === 'boneTransform' && track.boneId && track.transformType) {
+        const boneStore = useBoneStore.getState();
+
+        // Build pose transform based on transform type
+        const poseTransform: any = {};
+        if (track.transformType === 'position') {
+          poseTransform.position = value;
+        } else if (track.transformType === 'rotation') {
+          poseTransform.rotation = value;
+        } else if (track.transformType === 'scale') {
+          poseTransform.scale = value;
+        }
+
+        // Apply to bone pose
+        boneStore.setPoseTransform(track.boneId, poseTransform);
+      }
+      else {
         // Collect updates per object for regular properties
         if (!updates.has(track.objectId)) {
           updates.set(track.objectId, {});
