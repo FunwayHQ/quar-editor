@@ -3,10 +3,16 @@
  *
  * Manages non-destructive modifier stack for objects.
  * Sprint 7: Export System + Polygon Editing MVP - Day 3
+ *
+ * Updated to support QMesh-based modifiers for proper half-edge operations.
  */
 
 import { create } from 'zustand';
 import * as THREE from 'three';
+import { QMesh } from '../lib/qmesh/QMesh';
+import { applySubdivisionModifier } from '../lib/qmesh/modifiers/Subdivision';
+import { applySolidifyModifier } from '../lib/qmesh/modifiers/Solidify';
+import { applyMirrorModifier } from '../lib/qmesh/modifiers/Mirror';
 
 export type ModifierType =
   | 'subdivision'
@@ -73,6 +79,7 @@ export interface ModifierStackState {
   getModifiers: (objectId: string) => Modifier[];
   clearModifiers: (objectId: string) => void;
   applyModifierStack: (objectId: string, baseGeometry: THREE.BufferGeometry) => THREE.BufferGeometry;
+  applyModifierStackToQMesh: (objectId: string, baseQMesh: QMesh) => QMesh; // NEW: QMesh-based modifiers
 }
 
 // Helper to generate unique IDs
@@ -228,10 +235,65 @@ export const useModifierStore = create<ModifierStackState>((set, get) => ({
 
     return geometry;
   },
+
+  applyModifierStackToQMesh: (objectId, baseQMesh) => {
+    const modifiers = get().getModifiers(objectId);
+    let qMesh = baseQMesh;
+
+    // Apply each enabled modifier in order
+    for (const modifier of modifiers) {
+      if (!modifier.enabled) continue;
+
+      try {
+        qMesh = applyQMeshModifier(qMesh, modifier);
+      } catch (error) {
+        console.error(`[ModifierStore] Failed to apply ${modifier.type} modifier to QMesh:`, error);
+      }
+    }
+
+    return qMesh;
+  },
 }));
 
 /**
- * Apply a single modifier to geometry
+ * Apply a single modifier to QMesh (NEW: QMesh-based modifiers)
+ */
+function applyQMeshModifier(qMesh: QMesh, modifier: Modifier): QMesh {
+  console.log(`[ModifierStore] Applying ${modifier.type} modifier to QMesh`);
+
+  switch (modifier.type) {
+    case 'subdivision': {
+      const levels = modifier.params.levels || 1;
+      return applySubdivisionModifier(qMesh, levels);
+    }
+
+    case 'mirror': {
+      const axis = modifier.params.mirrorAxis || 'x';
+      const mergeThreshold = modifier.params.mergeThreshold || 0.001;
+      // Note: clip parameter not in current params, using false as default
+      return applyMirrorModifier(qMesh, axis, mergeThreshold, false);
+    }
+
+    case 'solidify': {
+      const thickness = modifier.params.thickness || 0.1;
+      const offset = modifier.params.offset || 0;
+      return applySolidifyModifier(qMesh, thickness, offset);
+    }
+
+    case 'array':
+    case 'bevel':
+    case 'displace':
+      console.warn(`[ModifierStore] ${modifier.type} modifier not yet implemented for QMesh`);
+      return qMesh;
+
+    default:
+      console.warn(`Unknown modifier type: ${modifier.type}`);
+      return qMesh;
+  }
+}
+
+/**
+ * Apply a single modifier to geometry (LEGACY: BufferGeometry-based modifiers)
  */
 function applyModifier(geometry: THREE.BufferGeometry, modifier: Modifier): THREE.BufferGeometry {
   switch (modifier.type) {
