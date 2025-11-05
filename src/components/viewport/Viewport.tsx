@@ -25,6 +25,7 @@ import { EditModeToolbar } from './EditModeToolbar';
 import { KnifeToolVisuals } from './KnifeToolVisuals';
 import { CurveRenderer } from './CurveRenderer';
 import { PreviewMeshRenderer } from './PreviewMeshRenderer';
+import { PoseModeToolbar } from './PoseModeToolbar';
 import { useCameraPresets } from './CameraPresets';
 import * as THREE from 'three';
 import { useEffect } from 'react';
@@ -287,6 +288,9 @@ export function Viewport() {
 
       {/* Edit Mode Toolbar */}
       <EditModeToolbar />
+
+      {/* Pose Mode Toolbar */}
+      <PoseModeToolbar />
     </div>
   );
 }
