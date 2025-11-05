@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Play, Square, RotateCcw, Copy, Clipboard } from 'lucide-react';
+import { Play, Square, RotateCcw, Copy, Clipboard, Plus } from 'lucide-react';
 import { useBoneStore } from '../../stores/boneStore';
 import { useObjectsStore } from '../../stores/objectsStore';
 
@@ -20,6 +20,7 @@ export function PoseModeToolbar() {
     resetPose,
     copyPose,
     pastePose,
+    createBone,
   } = useBoneStore();
 
   const selectedIds = useObjectsStore((state) => state.selectedIds);
@@ -64,6 +65,19 @@ export function PoseModeToolbar() {
     pastePose(copiedPose);
   };
 
+  // Handle add bone
+  const handleAddBone = () => {
+    if (poseArmatureId) {
+      // If a bone is selected, add as child of that bone
+      const parentId = selectedBoneIds.size > 0
+        ? Array.from(selectedBoneIds)[0]
+        : poseArmatureId;
+
+      // Create bone at origin (user can move it with transform tools)
+      createBone(parentId, [0, 0, 0]);
+    }
+  };
+
   // Don't show toolbar if no armature selected and not in pose mode
   if (!selectedArmature && !isPoseMode) {
     return null;
@@ -99,6 +113,22 @@ export function PoseModeToolbar() {
             >
               <Square className="w-4 h-4" />
               <span className="text-sm">Exit Pose Mode</span>
+            </button>
+
+            {/* Divider */}
+            <div className="border-t border-[#27272A] my-1" />
+
+            {/* Bone Tools */}
+            <div className="text-xs text-[#A1A1AA] mb-1">Bone Tools</div>
+
+            {/* Add Bone */}
+            <button
+              onClick={handleAddBone}
+              className="flex items-center gap-2 px-3 py-2 rounded bg-[#10B981] hover:bg-[#059669] text-white transition-colors"
+              title="Add new bone"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="text-sm">Add Bone</span>
             </button>
 
             {/* Divider */}
