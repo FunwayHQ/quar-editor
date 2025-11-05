@@ -26,6 +26,7 @@ import { KnifeToolVisuals } from './KnifeToolVisuals';
 import { CurveRenderer } from './CurveRenderer';
 import { PreviewMeshRenderer } from './PreviewMeshRenderer';
 import { PoseModeToolbar } from './PoseModeToolbar';
+import { WeightPaintToolbar } from './WeightPaintToolbar';
 import { useCameraPresets } from './CameraPresets';
 import * as THREE from 'three';
 import { useEffect } from 'react';
@@ -291,6 +292,9 @@ export function Viewport() {
 
       {/* Pose Mode Toolbar */}
       <PoseModeToolbar />
+
+      {/* Weight Paint Toolbar */}
+      <WeightPaintToolbar />
     </div>
   );
 }

@@ -28,6 +28,14 @@ export interface BoneState {
   poseArmatureId: string | null;      // Which armature is being posed
   selectedBoneIds: Set<string>;       // Selected bones in pose mode
 
+  // Weight paint mode state
+  isWeightPaintMode: boolean;
+  weightPaintMeshId: string | null;    // Which mesh is being weight painted
+  weightPaintBoneId: string | null;    // Which bone we're painting weights for
+  weightPaintBrushSize: number;        // Brush size in world units
+  weightPaintBrushStrength: number;    // Brush strength (0-1)
+  weightPaintMode: 'add' | 'subtract' | 'smooth' | 'average';  // Paint mode
+
   // Active bone (for transform controls)
   activeBoneId: string | null;
 
@@ -38,6 +46,15 @@ export interface BoneState {
   deselectBone: (boneId: string) => void;
   clearBoneSelection: () => void;
   setActiveBone: (boneId: string | null) => void;
+
+  // Weight paint mode operations
+  enterWeightPaintMode: (meshId: string) => void;
+  exitWeightPaintMode: () => void;
+  setWeightPaintBone: (boneId: string | null) => void;
+  setWeightPaintBrushSize: (size: number) => void;
+  setWeightPaintBrushStrength: (strength: number) => void;
+  setWeightPaintMode: (mode: 'add' | 'subtract' | 'smooth' | 'average') => void;
+  paintVertexWeight: (vertexIndex: number, weight: number) => void;
 
   // Bone creation and management
   createBone: (parentId: string | null, position: [number, number, number]) => string;
@@ -106,6 +123,14 @@ export const useBoneStore = create<BoneState>((set, get) => ({
   selectedBoneIds: new Set(),
   activeBoneId: null,
 
+  // Weight paint mode initial state
+  isWeightPaintMode: false,
+  weightPaintMeshId: null,
+  weightPaintBoneId: null,
+  weightPaintBrushSize: 0.5,
+  weightPaintBrushStrength: 0.5,
+  weightPaintMode: 'add',
+
   // Pose mode operations
   enterPoseMode: (armatureId: string) => {
     console.log('[BoneStore] Entering pose mode for armature:', armatureId);
@@ -156,6 +181,117 @@ export const useBoneStore = create<BoneState>((set, get) => ({
 
   setActiveBone: (boneId: string | null) => {
     set({ activeBoneId: boneId });
+  },
+
+  // Weight paint mode operations
+  enterWeightPaintMode: (meshId: string) => {
+    console.log('[BoneStore] Entering weight paint mode for mesh:', meshId);
+
+    const objectsStore = useObjectsStore.getState();
+    const mesh = objectsStore.objects.get(meshId);
+
+    if (!mesh || !mesh.skinData) {
+      console.error('[BoneStore] Cannot enter weight paint mode: mesh not skinned');
+      return;
+    }
+
+    set({
+      isWeightPaintMode: true,
+      weightPaintMeshId: meshId,
+      weightPaintBoneId: null,
+      // Exit pose mode if active
+      isPoseMode: false,
+      poseArmatureId: null,
+    });
+  },
+
+  exitWeightPaintMode: () => {
+    console.log('[BoneStore] Exiting weight paint mode');
+    set({
+      isWeightPaintMode: false,
+      weightPaintMeshId: null,
+      weightPaintBoneId: null,
+    });
+  },
+
+  setWeightPaintBone: (boneId: string | null) => {
+    set({ weightPaintBoneId: boneId });
+  },
+
+  setWeightPaintBrushSize: (size: number) => {
+    set({ weightPaintBrushSize: Math.max(0.1, Math.min(size, 10)) });
+  },
+
+  setWeightPaintBrushStrength: (strength: number) => {
+    set({ weightPaintBrushStrength: Math.max(0, Math.min(strength, 1)) });
+  },
+
+  setWeightPaintMode: (mode: 'add' | 'subtract' | 'smooth' | 'average') => {
+    set({ weightPaintMode: mode });
+  },
+
+  paintVertexWeight: (vertexIndex: number, weight: number) => {
+    const state = get();
+    const { weightPaintMeshId, weightPaintBoneId, weightPaintMode, weightPaintBrushStrength } = state;
+
+    if (!weightPaintMeshId || !weightPaintBoneId) {
+      console.warn('[BoneStore] Cannot paint: no mesh or bone selected');
+      return;
+    }
+
+    const objectsStore = useObjectsStore.getState();
+    const mesh = objectsStore.objects.get(weightPaintMeshId);
+
+    if (!mesh || !mesh.skinData) return;
+
+    // Get current weights for this vertex
+    const currentWeights = mesh.skinData.weights.get(vertexIndex) || [];
+    const boneInfluences = new Map<string, number>();
+
+    // Build map of current influences
+    currentWeights.forEach(influence => {
+      boneInfluences.set(influence.boneId, influence.weight);
+    });
+
+    // Apply paint based on mode
+    const currentWeight = boneInfluences.get(weightPaintBoneId) || 0;
+    let newWeight = currentWeight;
+
+    switch (weightPaintMode) {
+      case 'add':
+        newWeight = Math.min(1, currentWeight + weight * weightPaintBrushStrength);
+        break;
+      case 'subtract':
+        newWeight = Math.max(0, currentWeight - weight * weightPaintBrushStrength);
+        break;
+      case 'smooth':
+        // Smooth will be handled separately with neighbor averaging
+        newWeight = currentWeight;
+        break;
+      case 'average':
+        // Average towards target weight
+        newWeight = currentWeight + (weight - currentWeight) * weightPaintBrushStrength;
+        break;
+    }
+
+    // Update the bone's weight
+    boneInfluences.set(weightPaintBoneId, newWeight);
+
+    // Convert back to array and normalize
+    const newInfluences: BoneInfluence[] = Array.from(boneInfluences.entries())
+      .filter(([_, w]) => w > 0.001)  // Remove negligible weights
+      .map(([boneId, w]) => ({ boneId, weight: w }));
+
+    // Normalize weights to sum to 1.0
+    const totalWeight = newInfluences.reduce((sum, inf) => sum + inf.weight, 0);
+    if (totalWeight > 0) {
+      newInfluences.forEach(inf => {
+        inf.weight /= totalWeight;
+      });
+    }
+
+    // Update vertex weights
+    state.setVertexWeights(weightPaintMeshId, vertexIndex, newInfluences);
   },
 
   // Bone creation
