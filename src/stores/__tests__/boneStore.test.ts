@@ -22,9 +22,6 @@ describe('BoneStore - Epic 1: Data Structures', () => {
     useObjectsStore.setState({
       objects: new Map(),
       selectedIds: [],
-      hoveredId: null,
-      hoveredFaceId: null,
-      modifiedAt: Date.now(),
     });
   });
 
@@ -42,13 +39,13 @@ describe('BoneStore - Epic 1: Data Structures', () => {
       expect(armature?.armatureProps?.rootBoneId).toBeNull();
     });
 
-    test('should create armature with default name', () => {
-      const armatureId = useBoneStore.getState().createArmature();
+    test('should create armature with provided name', () => {
+      const armatureId = useBoneStore.getState().createArmature('MyArmature', [0, 0, 0]);
 
       const objectsStore = useObjectsStore.getState();
       const armature = objectsStore.objects.get(armatureId);
 
-      expect(armature?.name).toMatch(/^Armature\d+$/);
+      expect(armature?.name).toBe('MyArmature');
     });
 
     test('should delete armature', () => {

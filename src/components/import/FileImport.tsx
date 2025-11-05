@@ -5,7 +5,7 @@
  */
 
 import React, { useRef } from 'react';
-import { Upload, FileUp } from 'lucide-react';
+import { FileUp } from 'lucide-react';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -16,12 +16,11 @@ import { useCommandStore } from '../../stores/commandStore';
 import { CreateObjectCommand } from '../../lib/commands/ObjectCommands';
 import { useCurveStore } from '../../stores/curveStore';
 import { SVGParser } from '../../lib/curves/SVGParser';
+import { SkeletonImporter } from '../../lib/import/SkeletonImporter';
 
 export function FileImport() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const createPrimitive = useObjectsStore((state) => state.createPrimitive);
-  const addObject = useObjectsStore((state) => state.addObject);
   const executeCommand = useCommandStore((state) => state.executeCommand);
   const addMaterial = useMaterialsStore((state) => state.addMaterial);
   const assignMaterialToObject = useMaterialsStore((state) => state.assignMaterialToObject);
@@ -104,6 +103,23 @@ export function FileImport() {
           const generateName = useObjectsStore.getState().generateName;
           const now = Date.now();
 
+          // Check for skinned meshes (rigged characters)
+          const skinnedMeshes = SkeletonImporter.findSkinnedMeshes(gltf.scene);
+          const hasSkeletalAnimation = skinnedMeshes.length > 0;
+
+          console.log('[FileImport] Found', skinnedMeshes.length, 'skinned meshes');
+
+          // Import skeleton first if present
+          let boneImportResult: ReturnType<typeof SkeletonImporter.importSkeleton> | null = null;
+          if (hasSkeletalAnimation && skinnedMeshes[0].skeleton) {
+            const skinnedMesh = skinnedMeshes[0];
+            boneImportResult = SkeletonImporter.importSkeleton(
+              skinnedMesh.skeleton,
+              file.name.replace(/\.(glb|gltf)$/i, '')
+            );
+            console.log('[FileImport] Imported skeleton with armature:', boneImportResult.armatureId);
+          }
+
           // PASS 1: Create all objects and build ID map
           gltf.scene.traverse((child) => {
             if (child instanceof THREE.Mesh) {
@@ -177,6 +193,17 @@ export function FileImport() {
                 addMaterial(material);
                 assignMaterialToObject(objectId, materialId);
               }
+
+              // Import skinning data if this is a SkinnedMesh
+              if (SkeletonImporter.isSkinnedMesh(child) && boneImportResult) {
+                console.log('[FileImport] Importing skinning data for:', child.name);
+                SkeletonImporter.importSkinning(
+                  objectId,
+                  child,
+                  boneImportResult.boneIdMap,
+                  boneImportResult.armatureId
+                );
+              }
             }
           });
 
@@ -204,7 +231,12 @@ export function FileImport() {
             }
           });
 
-          console.log('[FileImport] GLTF import complete with hierarchy preserved');
+          if (hasSkeletalAnimation) {
+            console.log('[FileImport] GLTF import complete with skeletal animation!');
+          } else {
+            console.log('[FileImport] GLTF import complete with hierarchy preserved');
+          }
+
           URL.revokeObjectURL(url);
           resolve(gltf);
         },
