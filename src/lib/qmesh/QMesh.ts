@@ -51,9 +51,16 @@ export class QFace {
     let current = this.oneHalfEdge;
 
     do {
-      // The "from" vertex is the twin's toVertex
+      // Get the "from" vertex: preferably from twin, fallback to prev's toVertex
+      let fromVertex: QVertex | null = null;
       if (current.twin) {
-        vertices.push(current.twin.toVertex);
+        fromVertex = current.twin.toVertex;
+      } else if (current.prev) {
+        fromVertex = current.prev.toVertex;
+      }
+
+      if (fromVertex) {
+        vertices.push(fromVertex);
       }
       current = current.next!;
     } while (current && current !== this.oneHalfEdge);
@@ -131,10 +138,15 @@ export class QHalfEdge {
   }
 
   /**
-   * Get the "from" vertex (the twin's toVertex)
+   * Get the "from" vertex (the twin's toVertex, or fallback to prev's toVertex)
    */
   getFromVertex(): QVertex | null {
-    return this.twin ? this.twin.toVertex : null;
+    if (this.twin) {
+      return this.twin.toVertex;
+    } else if (this.prev) {
+      return this.prev.toVertex;
+    }
+    return null;
   }
 
   /**
@@ -988,13 +1000,15 @@ export class QMesh {
 
       mergedFace.oneHalfEdge = mergedHalfEdges[0];
 
-      // Delete old faces
+      // Delete old faces and their half-edges
+      const face1HalfEdges = face1.getHalfEdges();
+      const face2HalfEdges = face2.getHalfEdges();
+
+      face1HalfEdges.forEach(h => this.halfEdges.delete(h.id));
+      face2HalfEdges.forEach(h => this.halfEdges.delete(h.id));
+
       this.faces.delete(face1.id);
       this.faces.delete(face2.id);
-
-      // Delete half-edges associated with dissolved edge
-      this.halfEdges.delete(he.id);
-      this.halfEdges.delete(he.twin.id);
     });
 
     // Relink twins
