@@ -27,20 +27,22 @@ export function FileImport() {
   const addCurve = useCurveStore((state) => state.addCurve);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const extension = file.name.split('.').pop()?.toLowerCase();
+    const mainFile = files[0];
+    const extension = mainFile.name.split('.').pop()?.toLowerCase();
 
     try {
       if (extension === 'svg') {
-        await importSVG(file);
+        await importSVG(mainFile);
       } else if (extension === 'glb' || extension === 'gltf') {
-        await importGLTF(file);
+        // Pass all selected files to handle dependencies
+        await importGLTF(mainFile, Array.from(files));
       } else if (extension === 'fbx') {
-        await importFBX(file);
+        await importFBX(mainFile);
       } else if (extension === 'obj') {
-        await importOBJ(file);
+        await importOBJ(mainFile);
       } else {
         alert(`File format .${extension} is not supported yet. Supported formats: SVG, GLB, GLTF, FBX, OBJ`);
       }
@@ -84,17 +86,127 @@ export function FileImport() {
     }
   };
 
-  const importGLTF = async (file: File) => {
-    const loader = new GLTFLoader();
+  const importGLTF = async (file: File, allFiles: File[] = []) => {
+    // Create a loading manager to handle external resources
+    const manager = new THREE.LoadingManager();
+    const loader = new GLTFLoader(manager);
 
-    // Read file as ArrayBuffer
+    // Store for external resources (bin files, textures) and their blob URLs
+    const resourceCache = new Map<string, string>();
+    const blobUrls: string[] = [];
+
+    // Load all additional files into cache
+    console.log('[FileImport] Processing', allFiles.length, 'files');
+    for (const depFile of allFiles) {
+      if (depFile === file) continue; // Skip main file
+
+      const depExtension = depFile.name.split('.').pop()?.toLowerCase();
+      const filename = depFile.name;
+
+      // Load bin files and texture files
+      if (depExtension === 'bin' ||
+          depExtension === 'jpg' ||
+          depExtension === 'jpeg' ||
+          depExtension === 'png' ||
+          depExtension === 'webp' ||
+          depExtension === 'ktx2') {
+        const depArrayBuffer = await depFile.arrayBuffer();
+
+        // Determine MIME type
+        let mimeType = 'application/octet-stream';
+        if (depExtension === 'bin') mimeType = 'application/octet-stream';
+        else if (depExtension === 'jpg' || depExtension === 'jpeg') mimeType = 'image/jpeg';
+        else if (depExtension === 'png') mimeType = 'image/png';
+        else if (depExtension === 'webp') mimeType = 'image/webp';
+        else if (depExtension === 'ktx2') mimeType = 'image/ktx2';
+
+        const depBlob = new Blob([depArrayBuffer], { type: mimeType });
+        const depUrl = URL.createObjectURL(depBlob);
+
+        resourceCache.set(filename, depUrl);
+        blobUrls.push(depUrl);
+
+        console.log('[FileImport] Cached external resource:', filename, 'as', depUrl);
+      }
+    }
+
+    // Parse GLTF file to find external resources
     const arrayBuffer = await file.arrayBuffer();
-    const blob = new Blob([arrayBuffer]);
-    const url = URL.createObjectURL(blob);
+    let gltfJson: any = null;
+    let mainUrl: string;
+
+    // Determine if it's GLB (binary) or GLTF (JSON)
+    const extension = file.name.split('.').pop()?.toLowerCase();
+
+    if (extension === 'gltf') {
+      // Parse JSON to find external references
+      const text = new TextDecoder().decode(arrayBuffer);
+      gltfJson = JSON.parse(text);
+
+      // Create blob URL for main GLTF file
+      const blob = new Blob([arrayBuffer], { type: 'model/gltf+json' });
+      mainUrl = URL.createObjectURL(blob);
+      blobUrls.push(mainUrl);
+
+      console.log('[FileImport] Parsed GLTF JSON');
+
+      // Check for missing external files
+      const missingFiles: string[] = [];
+      if (gltfJson.buffers) {
+        gltfJson.buffers.forEach((buffer: any) => {
+          if (buffer.uri && !buffer.uri.startsWith('data:')) {
+            const filename = buffer.uri.split('/').pop();
+            if (!resourceCache.has(filename)) {
+              missingFiles.push(filename);
+            }
+          }
+        });
+      }
+      if (gltfJson.images) {
+        gltfJson.images.forEach((image: any) => {
+          if (image.uri && !image.uri.startsWith('data:')) {
+            const filename = image.uri.split('/').pop();
+            if (!resourceCache.has(filename)) {
+              missingFiles.push(filename);
+            }
+          }
+        });
+      }
+
+      if (missingFiles.length > 0) {
+        const missingList = missingFiles.join(', ');
+        alert(`Missing external files required by GLTF:\n\n${missingList}\n\nPlease select the GLTF file along with all its dependencies (bin, jpg, png files) by holding Ctrl/Cmd and clicking multiple files.`);
+        blobUrls.forEach(url => URL.revokeObjectURL(url));
+        throw new Error(`Missing external files: ${missingList}`);
+      }
+    } else {
+      // GLB file - binary format (may still reference external textures)
+      const blob = new Blob([arrayBuffer], { type: 'model/gltf-binary' });
+      mainUrl = URL.createObjectURL(blob);
+      blobUrls.push(mainUrl);
+    }
+
+    // Set up loading manager to intercept external file loads
+    manager.setURLModifier((url) => {
+      console.log('[FileImport] LoadingManager intercepted URL:', url);
+
+      // Extract filename from URL (handle both relative and absolute paths)
+      const filename = url.split('/').pop() || url;
+
+      // Check if we have this resource cached
+      if (resourceCache.has(filename)) {
+        console.log('[FileImport] Using cached resource:', filename);
+        return resourceCache.get(filename)!;
+      }
+
+      // If not cached, return original URL (will likely fail, but we'll catch the error)
+      console.warn('[FileImport] External resource not found:', filename);
+      return url;
+    });
 
     return new Promise((resolve, reject) => {
       loader.load(
-        url,
+        mainUrl,
         (gltf) => {
           console.log('[FileImport] GLTF loaded:', gltf);
 
@@ -248,12 +360,14 @@ export function FileImport() {
             console.log('[FileImport] GLTF import complete with hierarchy preserved');
           }
 
-          URL.revokeObjectURL(url);
+          // Clean up all blob URLs
+          blobUrls.forEach(url => URL.revokeObjectURL(url));
           resolve(gltf);
         },
         undefined,
         (error) => {
-          URL.revokeObjectURL(url);
+          // Clean up all blob URLs on error
+          blobUrls.forEach(url => URL.revokeObjectURL(url));
           reject(error);
         }
       );
@@ -497,8 +611,9 @@ export function FileImport() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".svg,.glb,.gltf,.fbx,.obj"
+        accept=".svg,.glb,.gltf,.fbx,.obj,.bin,.jpg,.jpeg,.png,.webp,.ktx2"
         onChange={handleFileSelect}
+        multiple
         className="hidden"
       />
     </>
