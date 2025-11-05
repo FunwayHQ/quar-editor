@@ -215,7 +215,7 @@ export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
 
               {expandedCategories.has('mesh') && (
                 <div className="ml-4 mt-1 space-y-0.5">
-                  {categorizedItems.mesh.map((item, idx) => {
+                  {categorizedItems.mesh.map((item) => {
                     const Icon = item.icon;
                     const globalIndex = flattenedItems.indexOf(item);
                     const isSelected = globalIndex === selectedIndex;

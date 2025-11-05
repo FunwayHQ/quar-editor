@@ -254,10 +254,10 @@ export function FileImport() {
               const indexAttr = geometry.getIndex();
 
               const importedGeometry = {
-                vertices: Array.from(positionAttr.array),
-                normals: normalAttr ? Array.from(normalAttr.array) : [],
-                uvs: uvAttr ? Array.from(uvAttr.array) : [],
-                indices: indexAttr ? Array.from(indexAttr.array) : undefined,
+                vertices: Array.from(positionAttr.array) as number[],
+                normals: normalAttr ? (Array.from(normalAttr.array) as number[]) : [],
+                uvs: uvAttr ? (Array.from(uvAttr.array) as number[]) : [],
+                indices: indexAttr ? (Array.from(indexAttr.array) as number[]) : undefined,
               };
 
               const objectId = `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -403,10 +403,10 @@ export function FileImport() {
               const indexAttr = geometry.getIndex();
 
               const importedGeometry = {
-                vertices: Array.from(positionAttr.array),
-                normals: normalAttr ? Array.from(normalAttr.array) : [],
-                uvs: uvAttr ? Array.from(uvAttr.array) : [],
-                indices: indexAttr ? Array.from(indexAttr.array) : undefined,
+                vertices: Array.from(positionAttr.array) as number[],
+                normals: normalAttr ? (Array.from(normalAttr.array) as number[]) : [],
+                uvs: uvAttr ? (Array.from(uvAttr.array) as number[]) : [],
+                indices: indexAttr ? (Array.from(indexAttr.array) as number[]) : undefined,
               };
 
               const objectId = `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -529,10 +529,10 @@ export function FileImport() {
             const indexAttr = geometry.getIndex();
 
             const importedGeometry = {
-              vertices: Array.from(positionAttr.array),
-              normals: normalAttr ? Array.from(normalAttr.array) : [],
-              uvs: uvAttr ? Array.from(uvAttr.array) : [],
-              indices: indexAttr ? Array.from(indexAttr.array) : undefined,
+              vertices: Array.from(positionAttr.array) as number[],
+              normals: normalAttr ? (Array.from(normalAttr.array) as number[]) : [],
+              uvs: uvAttr ? (Array.from(uvAttr.array) as number[]) : [],
+              indices: indexAttr ? (Array.from(indexAttr.array) as number[]) : undefined,
             };
 
             const object: SceneObject = {

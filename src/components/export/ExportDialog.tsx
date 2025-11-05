@@ -5,13 +5,12 @@
  * Sprint 7: Export System + Polygon Editing MVP
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, FileText, Box, Database, Zap } from 'lucide-react';
+import { X, Download, FileText, Box, Database } from 'lucide-react';
 import { useExportStore, ExportFormat } from '../../stores/exportStore';
 import { useObjectsStore } from '../../stores/objectsStore';
 import { useAnimationStore } from '../../stores/animationStore';
-import { useMaterialsStore } from '../../stores/materialsStore';
 import { useToastStore } from '../../stores/toastStore';
 import { getExportManager } from '../../lib/export/ExportManager';
 import { EXPORT_PRESETS, applyPreset } from '../../lib/export/ExportPresets';
