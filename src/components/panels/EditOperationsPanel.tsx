@@ -51,6 +51,7 @@ export function EditOperationsPanel() {
 
   // Helper function to store original geometry
   const storeOriginalGeometry = () => {
+    if (!editingObjectId) return;
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (mesh && mesh.geometry && !originalGeometryRef.current) {
       originalGeometryRef.current = mesh.geometry.clone();
@@ -59,6 +60,7 @@ export function EditOperationsPanel() {
 
   // Helper function to restore original geometry
   const restoreOriginalGeometry = () => {
+    if (!editingObjectId) return;
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (mesh && originalGeometryRef.current) {
       // Copy attributes from original back to current
@@ -80,6 +82,7 @@ export function EditOperationsPanel() {
   useEffect(() => {
     if (!previewMode || activeOperation !== 'extrude' || !isPreviewing) return;
     if (selectionMode !== 'face' || selectedFaces.size === 0) return;
+    if (!editingObjectId) return;
 
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (!mesh || !mesh.geometry) return;
@@ -91,10 +94,20 @@ export function EditOperationsPanel() {
     restoreOriginalGeometry();
 
     // Apply preview operation
-    if (mesh && mesh.geometry) {
+    // Note: Preview mode uses deprecated numeric face indices
+    // Convert QMesh face IDs (f_0, f_1, etc.) to indices by extracting the number
+    const faceIndices = new Set<number>();
+    selectedFaces.forEach(faceId => {
+      const match = faceId.match(/f_(\d+)/);
+      if (match) {
+        faceIndices.add(parseInt(match[1], 10));
+      }
+    });
+
+    if (mesh && mesh.geometry && faceIndices.size > 0) {
       MeshOperations.extrudeFaces(
         mesh.geometry,
-        selectedFaces,
+        faceIndices,
         { distance: extrudeDistance }
       );
     }
@@ -106,6 +119,7 @@ export function EditOperationsPanel() {
   useEffect(() => {
     if (!previewMode || activeOperation !== 'inset' || !isPreviewing) return;
     if (selectionMode !== 'face' || selectedFaces.size === 0) return;
+    if (!editingObjectId) return;
 
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (!mesh || !mesh.geometry) return;
@@ -117,10 +131,19 @@ export function EditOperationsPanel() {
     restoreOriginalGeometry();
 
     // Apply preview operation
-    if (mesh && mesh.geometry) {
+    // Convert QMesh face IDs to numeric indices
+    const faceIndices = new Set<number>();
+    selectedFaces.forEach(faceId => {
+      const match = faceId.match(/f_(\d+)/);
+      if (match) {
+        faceIndices.add(parseInt(match[1], 10));
+      }
+    });
+
+    if (mesh && mesh.geometry && faceIndices.size > 0) {
       MeshOperations.insetFaces(
         mesh.geometry,
-        selectedFaces,
+        faceIndices,
         insetAmount
       );
     }
