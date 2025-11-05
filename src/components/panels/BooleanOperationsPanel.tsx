@@ -4,7 +4,7 @@
  * CSG operations for combining/modifying meshes.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus, Minus, Circle, AlertCircle } from 'lucide-react';
 import { useObjectsStore } from '../../stores/objectsStore';
 import { useBooleanOperationsStore, BooleanOperation } from '../../stores/booleanOperationsStore';
@@ -12,7 +12,6 @@ import { useCommandStore } from '../../stores/commandStore';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
 import { validateMeshForBoolean } from '../../lib/mesh/BooleanOperations';
 import { BooleanOperationCommand } from '../../lib/commands/BooleanCommands';
-import * as THREE from 'three';
 
 export function BooleanOperationsPanel() {
   const selectedIds = useObjectsStore((state) => state.selectedIds);

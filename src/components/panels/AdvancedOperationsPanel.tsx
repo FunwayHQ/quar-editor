@@ -10,7 +10,7 @@
  * - Spin (Rotational Extrusion)
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Scissors,
   GitMerge,
@@ -32,8 +32,6 @@ export function AdvancedOperationsPanel() {
     selectedVertices,
     selectedEdges,
     selectedFaces,
-    setSelectedEdges,
-    setSelectedFaces,
     hasSelection,
   } = useEditModeStore();
 

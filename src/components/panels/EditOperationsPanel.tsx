@@ -5,17 +5,12 @@
  * Sprint 7: Export System + Polygon Editing MVP
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  Maximize2,
-  Minimize2,
   Grid3x3,
-  Move3d,
-  Layers,
   Settings2,
   ArrowUpFromLine,
   ArrowDownToLine,
-  Box,
   Eye,
   EyeOff
 } from 'lucide-react';
