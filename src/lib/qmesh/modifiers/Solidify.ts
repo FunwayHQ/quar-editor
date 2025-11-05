@@ -127,7 +127,7 @@ export function applySolidifyModifier(qMesh: QMesh, thickness: number, offset: n
     if (!fromVertex) return;
 
     // Get the four vertices for the rim quad:
-    // orig1 -> orig2 -> off2 -> off1
+    // orig1 -> off1 -> off2 -> orig2 (counter-clockwise when viewed from outside)
     const orig1 = originalVertices.get(fromVertex.id)!;
     const orig2 = originalVertices.get(he.toVertex.id)!;
     const off1 = offsetVertices.get(fromVertex.id)!;
@@ -139,9 +139,10 @@ export function applySolidifyModifier(qMesh: QMesh, thickness: number, offset: n
     newMesh.faces.set(rimFaceId, rimFace);
 
     // Create 4 half-edges for the rim quad
-    const he1 = new QHalfEdge(`he_${heCounter++}`, orig2);
+    // Winding: orig1 -> off1 -> off2 -> orig2
+    const he1 = new QHalfEdge(`he_${heCounter++}`, off1);
     const he2 = new QHalfEdge(`he_${heCounter++}`, off2);
-    const he3 = new QHalfEdge(`he_${heCounter++}`, off1);
+    const he3 = new QHalfEdge(`he_${heCounter++}`, orig2);
     const he4 = new QHalfEdge(`he_${heCounter++}`, orig1);
 
     // Link next/prev
@@ -164,10 +165,11 @@ export function applySolidifyModifier(qMesh: QMesh, thickness: number, offset: n
     newMesh.halfEdges.set(he4.id, he4);
 
     // Update vertex outgoing half-edges if not set
-    if (!orig1.oneOutgoingHalfEdge) orig1.oneOutgoingHalfEdge = he4;
-    if (!orig2.oneOutgoingHalfEdge) orig2.oneOutgoingHalfEdge = he1;
-    if (!off1.oneOutgoingHalfEdge) off1.oneOutgoingHalfEdge = he3;
-    if (!off2.oneOutgoingHalfEdge) off2.oneOutgoingHalfEdge = he2;
+    // he1: orig1 -> off1, he2: off1 -> off2, he3: off2 -> orig2, he4: orig2 -> orig1
+    if (!orig1.oneOutgoingHalfEdge) orig1.oneOutgoingHalfEdge = he1;
+    if (!off1.oneOutgoingHalfEdge) off1.oneOutgoingHalfEdge = he2;
+    if (!off2.oneOutgoingHalfEdge) off2.oneOutgoingHalfEdge = he3;
+    if (!orig2.oneOutgoingHalfEdge) orig2.oneOutgoingHalfEdge = he4;
   });
 
   // Step 6: Link twin edges

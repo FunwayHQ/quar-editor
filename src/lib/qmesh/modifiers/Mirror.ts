@@ -24,11 +24,12 @@ export function applyMirrorModifier(
   qMesh.vertices.forEach((vertex, vertexId) => {
     let pos = vertex.position.clone();
 
-    // If clip is enabled, clamp vertices on the mirror plane
+    // If clip is enabled, clamp vertices on the negative side to the mirror plane
     if (clip) {
       const axisIndex = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
-      if (pos.getComponent(axisIndex) > -mergeThreshold) {
-        pos.setComponent(axisIndex, Math.max(0, pos.getComponent(axisIndex)));
+      const value = pos.getComponent(axisIndex);
+      if (value < 0) {
+        pos.setComponent(axisIndex, 0);
       }
     }
 
