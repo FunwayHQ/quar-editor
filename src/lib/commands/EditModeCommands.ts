@@ -2,62 +2,69 @@
  * Edit Mode Commands
  *
  * Undo/redo commands for polygon editing operations.
+ * REFACTORED: Now uses QMesh string IDs
  */
 
 import { Command } from './Command';
 import { meshRegistry } from '../mesh/MeshRegistry';
+import { useObjectsStore } from '../../stores/objectsStore';
 import * as THREE from 'three';
 
 /**
  * Move Vertices Command
  * Stores old and new positions for selected vertices
+ * REFACTORED: Now uses QMesh and string vertex IDs
  */
 export class MoveVerticesCommand implements Command {
-  private oldPositions: Map<number, THREE.Vector3>;
-  private newPositions: Map<number, THREE.Vector3>;
+  private oldPositions: Map<string, THREE.Vector3>;
+  private newPositions: Map<string, THREE.Vector3>;
 
   constructor(
     private objectId: string,
-    private vertexIndices: number[],
-    oldPositions: Map<number, THREE.Vector3>,
-    newPositions: Map<number, THREE.Vector3>
+    private vertexIds: string[],
+    oldPositions: Map<string, THREE.Vector3>,
+    newPositions: Map<string, THREE.Vector3>
   ) {
     this.oldPositions = new Map(oldPositions);
     this.newPositions = new Map(newPositions);
   }
 
   execute(): void {
-    const mesh = meshRegistry.getMesh(this.objectId);
-    if (!mesh) return;
+    const sceneObject = useObjectsStore.getState().getObject(this.objectId);
+    if (!sceneObject || !sceneObject.qMesh) return;
 
-    const positions = mesh.geometry.attributes.position;
+    const qMesh = sceneObject.qMesh;
 
-    this.newPositions.forEach((pos, idx) => {
-      positions.setXYZ(idx, pos.x, pos.y, pos.z);
+    // Update QMesh vertices
+    this.newPositions.forEach((pos, vertexId) => {
+      const vertex = qMesh.vertices.get(vertexId);
+      if (vertex) {
+        vertex.position.copy(pos);
+      }
     });
 
-    positions.needsUpdate = true;
-    mesh.geometry.computeBoundingBox();
-    mesh.geometry.computeBoundingSphere();
-    mesh.geometry.computeVertexNormals();
+    // Recompile and update geometry
+    useObjectsStore.getState().updateObjectGeometry(this.objectId, qMesh);
 
-    console.log('[MoveVerticesCommand] Moved', this.vertexIndices.length, 'vertices');
+    console.log('[MoveVerticesCommand] Moved', this.vertexIds.length, 'vertices');
   }
 
   undo(): void {
-    const mesh = meshRegistry.getMesh(this.objectId);
-    if (!mesh) return;
+    const sceneObject = useObjectsStore.getState().getObject(this.objectId);
+    if (!sceneObject || !sceneObject.qMesh) return;
 
-    const positions = mesh.geometry.attributes.position;
+    const qMesh = sceneObject.qMesh;
 
-    this.oldPositions.forEach((pos, idx) => {
-      positions.setXYZ(idx, pos.x, pos.y, pos.z);
+    // Restore QMesh vertices
+    this.oldPositions.forEach((pos, vertexId) => {
+      const vertex = qMesh.vertices.get(vertexId);
+      if (vertex) {
+        vertex.position.copy(pos);
+      }
     });
 
-    positions.needsUpdate = true;
-    mesh.geometry.computeBoundingBox();
-    mesh.geometry.computeBoundingSphere();
-    mesh.geometry.computeVertexNormals();
+    // Recompile and update geometry
+    useObjectsStore.getState().updateObjectGeometry(this.objectId, qMesh);
 
     console.log('[MoveVerticesCommand] Undone - restored', this.oldPositions.size, 'vertices');
   }

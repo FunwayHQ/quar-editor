@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
 import { calculateGroupCenter, wouldCreateCircularDependency } from '../lib/hierarchy/TransformUtils';
+import { QMesh } from '../lib/qmesh/QMesh';
 
 export type ObjectType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane' | 'group' | 'camera' | 'imported' | 'pointLight' | 'spotLight' | 'directionalLight' | 'ambientLight';
 
@@ -29,7 +30,13 @@ export interface SceneObject {
   // Geometry data (for primitives)
   geometryParams?: Record<string, any>;
 
-  // Imported geometry data (for imported meshes)
+  // NEW: Half-Edge Mesh (Source of Truth for editing)
+  qMesh?: QMesh;
+
+  // NEW: Render Geometry (Compiled from qMesh for rendering)
+  renderGeometry?: THREE.BufferGeometry;
+
+  // DEPRECATED: Old imported geometry data (kept for backward compatibility during migration)
   importedGeometry?: {
     vertices: number[];
     normals: number[];
@@ -76,6 +83,10 @@ export interface ObjectsState {
   updateObject: (id: string, updates: Partial<SceneObject>) => void;
   getObject: (id: string) => SceneObject | undefined;
   getAllObjects: () => SceneObject[];
+
+  // Geometry management (NEW for QMesh architecture)
+  updateObjectGeometry: (id: string, newQMesh: QMesh) => void;
+  initializeGeometryFromBufferGeometry: (id: string, geometry: THREE.BufferGeometry) => void;
 
   // Object creation helpers
   createPrimitive: (type: ObjectType, position?: [number, number, number]) => SceneObject;
@@ -255,6 +266,50 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
 
     return { objects: newObjects };
   }),
+
+  // NEW: Update object geometry (QMesh architecture)
+  updateObjectGeometry: (id, newQMesh) => set((state) => {
+    const newObjects = new Map(state.objects);
+    const object = newObjects.get(id);
+
+    if (object) {
+      // Dispose old render geometry if it exists
+      if (object.renderGeometry) {
+        object.renderGeometry.dispose();
+      }
+
+      // Compile the new QMesh to BufferGeometry
+      const renderGeometry = newQMesh.toBufferGeometry();
+
+      newObjects.set(id, {
+        ...object,
+        qMesh: newQMesh,
+        renderGeometry,
+        modifiedAt: Date.now(),
+      });
+    }
+
+    return { objects: newObjects };
+  }),
+
+  // NEW: Initialize geometry from BufferGeometry (for primitives and imported meshes)
+  initializeGeometryFromBufferGeometry: (id, geometry) => {
+    const state = get();
+    const object = state.objects.get(id);
+
+    if (!object) return;
+
+    // Decompile the BufferGeometry to QMesh
+    const qMesh = QMesh.fromBufferGeometry(geometry);
+
+    // Re-compile to ensure clean render geometry with triangleFaceMap
+    const renderGeometry = qMesh.toBufferGeometry();
+
+    state.updateObject(id, {
+      qMesh,
+      renderGeometry,
+    });
+  },
 
   getObject: (id) => {
     return get().objects.get(id);

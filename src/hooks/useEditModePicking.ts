@@ -3,15 +3,13 @@
  *
  * Handles raycasting and selection in edit mode.
  * Sprint 7: Export System + Polygon Editing MVP
+ * REFACTORED: Now uses QMesh string IDs
  */
 
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useEditModeStore } from '../stores/editModeStore';
 import { useObjectsStore } from '../stores/objectsStore';
-import { pickVertex } from '../lib/polygon/pickers/VertexPicker';
-import { pickEdge } from '../lib/polygon/pickers/EdgePicker';
-import { pickFace } from '../lib/polygon/pickers/FacePicker';
 
 export function useEditModePicking() {
   const { camera, raycaster } = useThree();
@@ -31,13 +29,13 @@ export function useEditModePicking() {
 
     // Get the scene object we're editing
     const sceneObject = objects.get(editingObjectId);
-    if (!sceneObject) return;
+    if (!sceneObject || !sceneObject.qMesh) return;
+
+    const qMesh = sceneObject.qMesh;
 
     // Get geometry from the clicked mesh
     const mesh = object as THREE.Mesh;
     if (!mesh.geometry || !(mesh.geometry instanceof THREE.BufferGeometry)) return;
-
-    const geometry = mesh.geometry;
 
     // Cast ray to get intersection
     const mouseEvent = event as any; // ThreeEvent
@@ -53,39 +51,71 @@ export function useEditModePicking() {
     switch (selectionMode) {
       case 'vertex': {
         if (intersection.faceIndex !== undefined) {
-          const result = pickVertex(
-            geometry,
-            intersection.point,
-            intersection.faceIndex,
-            0.15 // Threshold
+          // Get the face ID from the triangle index
+          const faceId = qMesh.triangleFaceMap.get(intersection.faceIndex);
+          if (!faceId) break;
+
+          const face = qMesh.faces.get(faceId);
+          if (!face) break;
+
+          // Find the closest vertex to the intersection point
+          const vertices = face.getVertices();
+          let closestVertex = vertices[0];
+          let closestDistance = intersection.point.distanceTo(
+            mesh.localToWorld(vertices[0].position.clone())
           );
 
-          if (result) {
-            toggleVertexSelection(result.vertexIndex, multiSelect);
+          for (let i = 1; i < vertices.length; i++) {
+            const worldPos = mesh.localToWorld(vertices[i].position.clone());
+            const distance = intersection.point.distanceTo(worldPos);
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              closestVertex = vertices[i];
+            }
           }
+
+          toggleVertexSelection(closestVertex.id, multiSelect);
         }
         break;
       }
 
       case 'edge': {
-        const result = pickEdge(
-          geometry,
-          intersection.point,
-          0.1 // Threshold
-        );
+        // Find the closest edge to the intersection point
+        const edges = qMesh.getEdges();
+        let closestEdge: { v1: typeof edges[0]['v1']; v2: typeof edges[0]['v2'] } | null = null;
+        let closestDistance = Infinity;
 
-        if (result) {
-          toggleEdgeSelection(result.v1, result.v2, multiSelect);
+        edges.forEach(edge => {
+          const p0 = mesh.localToWorld(edge.v1.position.clone());
+          const p1 = mesh.localToWorld(edge.v2.position.clone());
+
+          // Calculate closest point on line segment
+          const line = new THREE.Line3(p0, p1);
+          const closestPoint = new THREE.Vector3();
+          line.closestPointToPoint(intersection.point, true, closestPoint);
+
+          const distance = intersection.point.distanceTo(closestPoint);
+
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestEdge = edge;
+          }
+        });
+
+        // Only select if within threshold
+        if (closestEdge && closestDistance < 0.1) {
+          toggleEdgeSelection(closestEdge.v1.id, closestEdge.v2.id, multiSelect);
         }
         break;
       }
 
       case 'face': {
         if (intersection.faceIndex !== undefined) {
-          const result = pickFace(geometry, intersection.faceIndex);
+          // Get the face ID directly from the triangle index using triangleFaceMap
+          const faceId = qMesh.triangleFaceMap.get(intersection.faceIndex);
 
-          if (result) {
-            toggleFaceSelection(result.faceIndex, multiSelect);
+          if (faceId) {
+            toggleFaceSelection(faceId, multiSelect);
           }
         }
         break;
