@@ -4,11 +4,10 @@
  * Modal for configuring extrude operation parameters.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useMeshOperationsStore, ExtrudeOptions } from '../../stores/meshOperationsStore';
 import { useCurveStore } from '../../stores/curveStore';
-import { useObjectsStore } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { usePreviewStore } from '../../stores/previewStore';
 import { extrudeCurve, generateExtrudeName } from '../../lib/mesh/ExtrudeUtils';
@@ -29,7 +28,7 @@ export function ExtrudeModal({ curveId, onClose }: ExtrudeModalProps) {
   const clearPreview = usePreviewStore((state) => state.clearPreview);
 
   const [localOptions, setLocalOptions] = useState<ExtrudeOptions>(extrudeOptions);
-  const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const debounceTimerRef = useRef<number>();
 
   if (!curve) {
     onClose();

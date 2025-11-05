@@ -5,7 +5,7 @@
  * Sprint 7: Export System + Polygon Editing MVP
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Maximize2, Trash2, Circle, Minus, Square as SquareIcon } from 'lucide-react';
 import { useEditModeStore } from '../../stores/editModeStore';
 

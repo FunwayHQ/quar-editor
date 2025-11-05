@@ -12,6 +12,7 @@ import { useEditModeStore } from '../stores/editModeStore';
 import { useKnifeToolStore } from '../stores/knifeToolStore';
 import { useSceneStore } from '../stores/sceneStore';
 import { useModalModeStore } from '../stores/modalModeStore';
+import { useBoneStore } from '../stores/boneStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand } from '../lib/commands/ObjectCommands';
 import { GroupObjectsCommand, UngroupObjectsCommand } from '../lib/commands/GroupCommands';
 import { getAnimationEngine } from '../lib/animation/AnimationEngine';
@@ -275,14 +276,39 @@ export function useKeyboardShortcuts(setShowAddMenu?: (show: boolean) => void) {
         }
       }
 
-      // Edit Mode: Tab key (enter/exit)
+      // Edit Mode / Pose Mode: Tab key (enter/exit)
       else if (e.key === 'Tab') {
         e.preventDefault();
+        const { isPoseMode, enterPoseMode, exitPoseMode } = useBoneStore.getState();
+        const { objects } = useObjectsStore.getState();
+
         if (isEditMode) {
+          // Exit edit mode
           exitEditMode();
+        } else if (isPoseMode) {
+          // Exit pose mode
+          exitPoseMode();
         } else if (selectedIds.length === 1) {
-          // Enter edit mode for selected object
-          enterEditMode(selectedIds[0]);
+          const selectedObject = objects.get(selectedIds[0]);
+
+          if (selectedObject?.type === 'armature') {
+            // Enter pose mode for armature
+            enterPoseMode(selectedIds[0]);
+          } else if (selectedObject?.type === 'bone') {
+            // If a bone is selected, enter pose mode for its armature parent
+            let current: typeof selectedObject | undefined = selectedObject;
+            while (current && current.type === 'bone' && current.parentId) {
+              const parent = objects.get(current.parentId);
+              if (parent?.type === 'armature') {
+                enterPoseMode(parent.id);
+                break;
+              }
+              current = parent;
+            }
+          } else {
+            // Enter edit mode for mesh
+            enterEditMode(selectedIds[0]);
+          }
         }
       }
 

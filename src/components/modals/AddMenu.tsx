@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useObjectsStore, ObjectType } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
+import { useBoneStore } from '../../stores/boneStore';
 import { CreateObjectCommand } from '../../lib/commands/ObjectCommands';
 import {
   Box,
@@ -22,6 +23,7 @@ import {
   CloudSun,
   Folder,
   Search,
+  Bone,
 } from 'lucide-react';
 
 interface AddMenuProps {
@@ -32,10 +34,10 @@ interface AddMenuProps {
 
 interface MenuItem {
   id: string;
-  type: ObjectType;
+  type: ObjectType | 'armature';
   label: string;
   icon: React.ElementType;
-  category: 'mesh' | 'light' | 'empty';
+  category: 'mesh' | 'light' | 'empty' | 'armature';
   shortcut?: string;
 }
 
@@ -56,16 +58,20 @@ const menuItems: MenuItem[] = [
 
   // Empty
   { id: 'group', type: 'group', label: 'Empty', icon: Folder, category: 'empty' },
+
+  // Armature
+  { id: 'armature', type: 'armature', label: 'Armature', icon: Bone, category: 'armature' },
 ];
 
 export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['mesh', 'light', 'empty']));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['mesh', 'light', 'empty', 'armature']));
 
   const createPrimitive = useObjectsStore((state) => state.createPrimitive);
   const createEmptyGroup = useObjectsStore((state) => state.createEmptyGroup);
   const executeCommand = useCommandStore((state) => state.executeCommand);
+  const { createArmature } = useBoneStore();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,6 +92,7 @@ export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
     mesh: filteredItems.filter(item => item.category === 'mesh'),
     light: filteredItems.filter(item => item.category === 'light'),
     empty: filteredItems.filter(item => item.category === 'empty'),
+    armature: filteredItems.filter(item => item.category === 'armature'),
   };
 
   // Flatten for keyboard navigation
@@ -93,6 +100,7 @@ export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
   if (expandedCategories.has('mesh')) flattenedItems.push(...categorizedItems.mesh);
   if (expandedCategories.has('light')) flattenedItems.push(...categorizedItems.light);
   if (expandedCategories.has('empty')) flattenedItems.push(...categorizedItems.empty);
+  if (expandedCategories.has('armature')) flattenedItems.push(...categorizedItems.armature);
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -118,8 +126,11 @@ export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, selectedIndex, flattenedItems, onClose]);
 
-  const handleAddObject = (type: ObjectType) => {
-    if (type === 'group') {
+  const handleAddObject = (type: ObjectType | 'armature') => {
+    if (type === 'armature') {
+      // Create armature at origin
+      createArmature('Armature', [0, 0, 0]);
+    } else if (type === 'group') {
       const group = createEmptyGroup();
       const command = new CreateObjectCommand(group);
       executeCommand(command);
@@ -204,7 +215,7 @@ export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
 
               {expandedCategories.has('mesh') && (
                 <div className="ml-4 mt-1 space-y-0.5">
-                  {categorizedItems.mesh.map((item, idx) => {
+                  {categorizedItems.mesh.map((item) => {
                     const Icon = item.icon;
                     const globalIndex = flattenedItems.indexOf(item);
                     const isSelected = globalIndex === selectedIndex;
@@ -275,7 +286,7 @@ export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
 
           {/* Empty Category */}
           {categorizedItems.empty.length > 0 && (
-            <div>
+            <div className="mb-2">
               <button
                 onClick={() => toggleCategory('empty')}
                 className="w-full flex items-center gap-2 px-2 py-1 text-xs font-medium text-[#A1A1AA] hover:text-[#FAFAFA] transition-colors"
@@ -287,6 +298,44 @@ export function AddMenu({ isOpen, onClose, cursorPosition }: AddMenuProps) {
               {expandedCategories.has('empty') && (
                 <div className="ml-4 mt-1 space-y-0.5">
                   {categorizedItems.empty.map((item) => {
+                    const Icon = item.icon;
+                    const globalIndex = flattenedItems.indexOf(item);
+                    const isSelected = globalIndex === selectedIndex;
+
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleAddObject(item.type)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded text-sm transition-colors ${
+                          isSelected
+                            ? 'bg-[#7C3AED]/20 text-[#FAFAFA] border-l-2 border-[#7C3AED]'
+                            : 'text-[#FAFAFA] hover:bg-[#27272A]'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span className="flex-1 text-left">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Armature Category */}
+          {categorizedItems.armature.length > 0 && (
+            <div>
+              <button
+                onClick={() => toggleCategory('armature')}
+                className="w-full flex items-center gap-2 px-2 py-1 text-xs font-medium text-[#A1A1AA] hover:text-[#FAFAFA] transition-colors"
+              >
+                <span className={`transition-transform ${expandedCategories.has('armature') ? 'rotate-90' : ''}`}>▶</span>
+                Armature
+              </button>
+
+              {expandedCategories.has('armature') && (
+                <div className="ml-4 mt-1 space-y-0.5">
+                  {categorizedItems.armature.map((item) => {
                     const Icon = item.icon;
                     const globalIndex = flattenedItems.indexOf(item);
                     const isSelected = globalIndex === selectedIndex;

@@ -5,17 +5,12 @@
  * Sprint 7: Export System + Polygon Editing MVP
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  Maximize2,
-  Minimize2,
   Grid3x3,
-  Move3d,
-  Layers,
   Settings2,
   ArrowUpFromLine,
   ArrowDownToLine,
-  Box,
   Eye,
   EyeOff
 } from 'lucide-react';
@@ -36,6 +31,7 @@ export function EditOperationsPanel() {
     selectedEdges,
     selectedFaces,
     hasSelection,
+    clearSelection,
   } = useEditModeStore();
 
   const { objects, transformMode, setTransformMode } = useObjectsStore();
@@ -54,8 +50,21 @@ export function EditOperationsPanel() {
   const originalGeometryRef = useRef<THREE.BufferGeometry | null>(null);
   const lastPreviewValuesRef = useRef({ extrudeDistance: 1.0, insetAmount: 0.1 });
 
+  // Helper function to convert QMesh face IDs to numeric indices
+  const convertFaceIdsToIndices = (faceIds: Set<string>): Set<number> => {
+    const indices = new Set<number>();
+    faceIds.forEach(faceId => {
+      const match = faceId.match(/f_(\d+)/);
+      if (match) {
+        indices.add(parseInt(match[1], 10));
+      }
+    });
+    return indices;
+  };
+
   // Helper function to store original geometry
   const storeOriginalGeometry = () => {
+    if (!editingObjectId) return;
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (mesh && mesh.geometry && !originalGeometryRef.current) {
       originalGeometryRef.current = mesh.geometry.clone();
@@ -64,6 +73,7 @@ export function EditOperationsPanel() {
 
   // Helper function to restore original geometry
   const restoreOriginalGeometry = () => {
+    if (!editingObjectId) return;
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (mesh && originalGeometryRef.current) {
       // Copy attributes from original back to current
@@ -85,6 +95,7 @@ export function EditOperationsPanel() {
   useEffect(() => {
     if (!previewMode || activeOperation !== 'extrude' || !isPreviewing) return;
     if (selectionMode !== 'face' || selectedFaces.size === 0) return;
+    if (!editingObjectId) return;
 
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (!mesh || !mesh.geometry) return;
@@ -96,10 +107,20 @@ export function EditOperationsPanel() {
     restoreOriginalGeometry();
 
     // Apply preview operation
-    if (mesh && mesh.geometry) {
+    // Note: Preview mode uses deprecated numeric face indices
+    // Convert QMesh face IDs (f_0, f_1, etc.) to indices by extracting the number
+    const faceIndices = new Set<number>();
+    selectedFaces.forEach(faceId => {
+      const match = faceId.match(/f_(\d+)/);
+      if (match) {
+        faceIndices.add(parseInt(match[1], 10));
+      }
+    });
+
+    if (mesh && mesh.geometry && faceIndices.size > 0) {
       MeshOperations.extrudeFaces(
         mesh.geometry,
-        selectedFaces,
+        faceIndices,
         { distance: extrudeDistance }
       );
     }
@@ -111,6 +132,7 @@ export function EditOperationsPanel() {
   useEffect(() => {
     if (!previewMode || activeOperation !== 'inset' || !isPreviewing) return;
     if (selectionMode !== 'face' || selectedFaces.size === 0) return;
+    if (!editingObjectId) return;
 
     const mesh = meshRegistry.getMesh(editingObjectId);
     if (!mesh || !mesh.geometry) return;
@@ -122,10 +144,19 @@ export function EditOperationsPanel() {
     restoreOriginalGeometry();
 
     // Apply preview operation
-    if (mesh && mesh.geometry) {
+    // Convert QMesh face IDs to numeric indices
+    const faceIndices = new Set<number>();
+    selectedFaces.forEach(faceId => {
+      const match = faceId.match(/f_(\d+)/);
+      if (match) {
+        faceIndices.add(parseInt(match[1], 10));
+      }
+    });
+
+    if (mesh && mesh.geometry && faceIndices.size > 0) {
       MeshOperations.insetFaces(
         mesh.geometry,
-        selectedFaces,
+        faceIndices,
         insetAmount
       );
     }
@@ -169,7 +200,7 @@ export function EditOperationsPanel() {
       // that knows how to undo to the original state
       const command = new ExtrudeFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         extrudeDistance
       );
 
@@ -206,7 +237,7 @@ export function EditOperationsPanel() {
       // Apply operation without preview using command
       const command = new ExtrudeFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         extrudeDistance
       );
       executeCommand(command);
@@ -249,7 +280,7 @@ export function EditOperationsPanel() {
       // that knows how to undo to the original state
       const command = new InsetFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         insetAmount
       );
 
@@ -289,7 +320,7 @@ export function EditOperationsPanel() {
       // Apply operation without preview using command
       const command = new InsetFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         insetAmount
       );
       executeCommand(command);
@@ -331,7 +362,7 @@ export function EditOperationsPanel() {
       },
     };
 
-    useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
+    useObjectsStore.getState().updateObject(editingObjectId, { importedGeometry: geometryData });
   };
 
   const handleInsetPreviewStart = () => {
@@ -353,6 +384,7 @@ export function EditOperationsPanel() {
       console.warn('Subdivide requires face selection');
       return;
     }
+    if (!editingObjectId) return;
 
     // Get the mesh from registry
     const mesh = meshRegistry.getMesh(editingObjectId);
@@ -362,12 +394,12 @@ export function EditOperationsPanel() {
     }
 
     // Store old geometry for undo
-    const oldGeometry = mesh.geometry.clone();
+    // const oldGeometry = mesh.geometry.clone(); // TODO: Implement undo for subdivide
 
     // Perform subdivide operation
     MeshOperations.subdivideFaces(
       mesh.geometry,
-      selectedFaces,
+      convertFaceIdsToIndices(selectedFaces),
       subdivisions
     );
 
@@ -401,7 +433,7 @@ export function EditOperationsPanel() {
     };
 
     // Update object in store
-    useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
+    useObjectsStore.getState().updateObject(editingObjectId, { importedGeometry: geometryData });
 
     // Clear selection after subdivision
     clearSelection();

@@ -4,7 +4,7 @@
  * Displays notification toasts for user feedback.
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { useToastStore, Toast as ToastType } from '../stores/toastStore';
 

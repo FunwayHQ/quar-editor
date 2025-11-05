@@ -13,6 +13,9 @@ import { useSceneStore } from '../../stores/sceneStore';
 import { useEditModePicking } from '../../hooks/useEditModePicking';
 import { EditModeHelpers } from './EditModeHelpers';
 import { KnifeFaceHighlight } from './KnifeFaceHighlight';
+import { BoneRenderer } from './BoneRenderer';
+import { SkinnedMeshRenderer } from './SkinnedMeshRenderer';
+import { useBoneStore } from '../../stores/boneStore';
 import { useEditModeStore } from '../../stores/editModeStore';
 import { useKnifeToolStore } from '../../stores/knifeToolStore';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
@@ -595,6 +598,58 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
   if (!object.visible) return null;
 
+  // Get pose mode state for bone rendering
+  const { isPoseMode } = useBoneStore();
+
+  // Render bones
+  if (object.type === 'bone') {
+    return (
+      <group position={object.position} rotation={object.rotation} scale={object.scale}>
+        <BoneRenderer
+          bone={object}
+          isSelected={isSelected}
+          isPoseMode={isPoseMode}
+          onSelect={onSelect}
+        />
+
+        {/* Render children recursively (child bones) */}
+        {childObjects.map((child) => (
+          <SceneObject
+            key={child.id}
+            object={child}
+            isSelected={false}
+            onSelect={onSelect}
+          />
+        ))}
+      </group>
+    );
+  }
+
+  // Render armatures (container for bones - invisible but renders children)
+  if (object.type === 'armature') {
+    return (
+      <group position={object.position} rotation={object.rotation} scale={object.scale}>
+        {/* Armature origin indicator */}
+        {isSelected && (
+          <mesh>
+            <sphereGeometry args={[0.1, 16, 16]} />
+            <meshBasicMaterial color="#F59E0B" wireframe />
+          </mesh>
+        )}
+
+        {/* Render child bones */}
+        {childObjects.map((child) => (
+          <SceneObject
+            key={child.id}
+            object={child}
+            isSelected={false}
+            onSelect={onSelect}
+          />
+        ))}
+      </group>
+    );
+  }
+
   // Render lights
   if (isLight) {
     const lightProps = object.lightProps || {
@@ -772,8 +827,14 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   // Render meshes with hierarchy support
   return (
     <group position={object.position} rotation={object.rotation} scale={object.scale}>
+      {/* Render skinned mesh with deformation */}
+      {object.skinData && !isEditMode && (
+        <SkinnedMeshRenderer meshId={object.id} />
+      )}
+
       {/* Only render mesh if geometry exists (groups have no geometry) */}
-      {geometry && (
+      {/* Skip regular mesh rendering for skinned meshes unless in edit mode */}
+      {geometry && (!object.skinData || isEditMode) && (
         <>
           <mesh
             ref={meshRef}

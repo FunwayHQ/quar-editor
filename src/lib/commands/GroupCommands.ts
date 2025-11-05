@@ -89,6 +89,10 @@ export class GroupObjectsCommand implements Command {
 
     this.groupId = null;
   }
+
+  getDescription(): string {
+    return `Group ${this.childIds.length} objects`;
+  }
 }
 
 /**
@@ -169,6 +173,10 @@ export class UngroupObjectsCommand implements Command {
       return { objects: newObjects };
     });
   }
+
+  getDescription(): string {
+    return `Ungroup objects`;
+  }
 }
 
 /**
@@ -218,6 +226,10 @@ export class ReparentObjectCommand implements Command {
       store.setParent(this.childId, this.oldParentId);
     }
   }
+
+  getDescription(): string {
+    return `Reparent object`;
+  }
 }
 
 /**
@@ -239,5 +251,9 @@ export class CreateEmptyGroupCommand implements Command {
     const store = useObjectsStore.getState();
     store.removeObject(this.groupId);
     this.groupId = null;
+  }
+
+  getDescription(): string {
+    return `Create empty group`;
   }
 }

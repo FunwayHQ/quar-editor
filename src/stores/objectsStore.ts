@@ -9,7 +9,33 @@ import * as THREE from 'three';
 import { calculateGroupCenter, wouldCreateCircularDependency } from '../lib/hierarchy/TransformUtils';
 import { QMesh } from '../lib/qmesh/QMesh';
 
-export type ObjectType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane' | 'group' | 'camera' | 'imported' | 'pointLight' | 'spotLight' | 'directionalLight' | 'ambientLight';
+export type ObjectType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane' | 'group' | 'camera' | 'imported' | 'pointLight' | 'spotLight' | 'directionalLight' | 'ambientLight' | 'bone' | 'armature';
+
+// Bone influence: how much a bone affects a vertex
+export interface BoneInfluence {
+  boneId: string;
+  weight: number;  // 0-1, typically sums to 1.0 per vertex
+}
+
+// Skin weights: vertex index -> bone influences
+export interface SkinWeights {
+  [vertexIndex: number]: BoneInfluence[];
+}
+
+// Bone pose: position, rotation (quaternion), scale
+export interface BonePose {
+  position: [number, number, number];
+  rotation: [number, number, number, number];  // Quaternion [x, y, z, w]
+  scale: [number, number, number];
+}
+
+// Skin data: binding between mesh and armature
+export interface SkinData {
+  armatureId: string;                          // Which armature this mesh is bound to
+  weights: SkinWeights;                        // Vertex weights for skinning
+  bindMatrix: number[];                        // Inverse bind matrix (16 floats)
+  bindPose: Map<string, BonePose>;             // Rest pose for each bone
+}
 
 export interface SceneObject {
   id: string;
@@ -67,6 +93,26 @@ export interface SceneObject {
     shadowBias?: number;
     shadowRadius?: number;
   };
+
+  // Bone properties (for type: 'bone')
+  boneProps?: {
+    headPosition: [number, number, number];  // Bone head (start point)
+    tailPosition: [number, number, number];  // Bone tail (end point)
+    roll: number;                            // Bone roll angle (twist around bone axis, in radians)
+    length: number;                          // Computed bone length
+    connected: boolean;                      // Whether bone is connected to parent (head = parent tail)
+  };
+
+  // Armature properties (for type: 'armature')
+  armatureProps?: {
+    rootBoneId: string | null;               // Root bone of this armature
+    displayType: 'octahedral' | 'stick' | 'bbone' | 'envelope';  // Bone display style
+    inFront: boolean;                        // X-ray display (show through objects)
+    axesDisplay: 'none' | 'wire' | 'solid';  // Show bone axes
+  };
+
+  // Skinning data (for meshes bound to armature)
+  skinData?: SkinData;
 
   // Metadata
   createdAt: number;
@@ -135,6 +181,8 @@ const nameCounters: Record<string, number> = {
   spotLight: 0,
   directionalLight: 0,
   ambientLight: 0,
+  bone: 0,
+  armature: 0,
 };
 
 // Helper to generate unique IDs
@@ -157,6 +205,8 @@ const defaultGeometryParams: Record<ObjectType, Record<string, any>> = {
   spotLight: {},
   directionalLight: {},
   ambientLight: {},
+  bone: {},
+  armature: {},
 };
 
 // Default light properties for each light type

@@ -24,6 +24,7 @@ import { RightSidebar } from './panels/RightSidebar';
 import { Timeline } from './timeline/Timeline';
 import { ExportDialog } from './export/ExportDialog';
 import { EditOperationsPanel } from './panels/EditOperationsPanel';
+import { AdvancedOperationsPanel } from './panels/AdvancedOperationsPanel';
 import { KnifeToolPanel } from './panels/KnifeToolPanel';
 import { ViewportToolbar } from './viewport/ViewportToolbar';
 import { AddMenu } from './modals/AddMenu';
@@ -280,8 +281,8 @@ export function Editor() {
         // Return object with updated geometry data
         return {
           ...obj,
-          geometry: {
-            ...obj.geometry,
+          importedGeometry: {
+            ...obj.importedGeometry,
             data: geometryData,
           }
         };
@@ -494,6 +495,7 @@ export function Editor() {
           <div className="flex-1 relative">
             <Viewport />
             {isEditMode && !isKnifeActive && <EditOperationsPanel />}
+            {isEditMode && !isKnifeActive && <AdvancedOperationsPanel />}
             {isEditMode && isKnifeActive && <KnifeToolPanel />}
           </div>
 

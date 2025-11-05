@@ -40,7 +40,6 @@ function ObjectTreeItem({ object, isSelected, onSelect, depth }: ObjectTreeItemP
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(object.name);
 
-  const updateObject = useObjectsStore((state) => state.updateObject);
   const getChildren = useObjectsStore((state) => state.getChildren);
   const executeCommand = useCommandStore((state) => state.executeCommand);
   const selectedIds = useObjectsStore((state) => state.selectedIds);

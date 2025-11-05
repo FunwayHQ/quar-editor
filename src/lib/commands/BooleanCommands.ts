@@ -143,4 +143,9 @@ export class BooleanOperationCommand implements Command {
 
     console.log('[BooleanCommand] Undone', this.operation);
   }
+
+  getDescription(): string {
+    const operationName = this.operation.charAt(0).toUpperCase() + this.operation.slice(1);
+    return `Boolean ${operationName}: ${this.baseMeshData.name} ${this.operation === 'union' ? '+' : this.operation === 'subtract' ? '-' : '∩'} ${this.toolMeshData.name}`;
+  }
 }

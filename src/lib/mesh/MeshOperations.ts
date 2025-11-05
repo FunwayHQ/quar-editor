@@ -3,10 +3,13 @@
  *
  * Provides mesh editing operations like extrude, bevel, loop cut, etc.
  * Sprint 7: Export System + Polygon Editing MVP
+ * REFACTORED: Now uses QMesh for clean topology-based operations
  */
 
 import * as THREE from 'three';
 import { splitTriangleAlongCut } from '../geometry/TriangulationUtils';
+import { useObjectsStore } from '../../stores/objectsStore';
+import type { QMesh } from '../qmesh/QMesh';
 
 export interface ExtrudeOptions {
   distance: number;
@@ -31,8 +34,231 @@ export interface KnifeCutOptions {
 }
 
 export class MeshOperations {
+  // ========================================================================
+  // NEW QMesh-based Operations (Clean, Topology-aware)
+  // ========================================================================
+
   /**
-   * Extrude selected faces along their average normal
+   * Extrude selected faces using QMesh (NEW)
+   * Returns the IDs of the newly created faces
+   */
+  static extrudeFacesQMesh(
+    objectId: string,
+    selectedFaceIds: string[],
+    distance: number
+  ): { newFaceIds: string[] } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { newFaceIds: [] };
+    }
+
+    const qMesh = sceneObject.qMesh;
+
+    // Use the clean QMesh extrude method
+    const result = qMesh.extrudeFaces(selectedFaceIds, distance);
+
+    // Update geometry in store (recompiles QMesh to renderGeometry)
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Extruded ${selectedFaceIds.length} faces, created ${result.newFaceIds.length} new faces`);
+
+    return result;
+  }
+
+  /**
+   * Inset selected faces using QMesh (NEW)
+   */
+  static insetFacesQMesh(
+    objectId: string,
+    selectedFaceIds: string[],
+    insetAmount: number
+  ): void {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return;
+    }
+
+    const qMesh = sceneObject.qMesh;
+
+    // Inset faces by moving vertices toward face center
+    selectedFaceIds.forEach(faceId => {
+      const face = qMesh.faces.get(faceId);
+      if (!face) return;
+
+      const vertices = face.getVertices();
+      const center = face.calculateCenter();
+
+      // Move each vertex toward the center
+      vertices.forEach(vertex => {
+        vertex.position.lerp(center, insetAmount);
+      });
+    });
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Inset ${selectedFaceIds.length} faces`);
+  }
+
+  /**
+   * Find edge loop from selected edge (NEW)
+   */
+  static findEdgeLoop(objectId: string, edgeKey: string): string[] {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return [];
+    }
+
+    return sceneObject.qMesh.findEdgeLoop(edgeKey);
+  }
+
+  /**
+   * Insert loop cut along edge loop (NEW)
+   */
+  static loopCutQMesh(
+    objectId: string,
+    edgeKey: string,
+    position: number = 0.5
+  ): { newVertexIds: string[]; newEdgeKeys: string[] } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { newVertexIds: [], newEdgeKeys: [] };
+    }
+
+    const qMesh = sceneObject.qMesh;
+    const result = qMesh.loopCut(edgeKey, position);
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Loop cut: created ${result.newVertexIds.length} vertices`);
+    return result;
+  }
+
+  /**
+   * Bevel selected edges (NEW)
+   */
+  static bevelEdgesQMesh(
+    objectId: string,
+    edgeKeys: string[],
+    amount: number,
+    segments: number = 1
+  ): { newFaceIds: string[] } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { newFaceIds: [] };
+    }
+
+    const qMesh = sceneObject.qMesh;
+    const result = qMesh.bevelEdges(edgeKeys, amount, segments);
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Beveled ${edgeKeys.length} edges`);
+    return result;
+  }
+
+  /**
+   * Merge selected vertices (NEW)
+   */
+  static mergeVerticesQMesh(
+    objectId: string,
+    vertexIds: string[]
+  ): { mergedVertexId: string } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { mergedVertexId: '' };
+    }
+
+    const qMesh = sceneObject.qMesh;
+    const result = qMesh.mergeVertices(vertexIds);
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Merged ${vertexIds.length} vertices`);
+    return result;
+  }
+
+  /**
+   * Dissolve selected edges (NEW)
+   */
+  static dissolveEdgesQMesh(
+    objectId: string,
+    edgeKeys: string[]
+  ): { mergedFaceIds: string[] } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { mergedFaceIds: [] };
+    }
+
+    const qMesh = sceneObject.qMesh;
+    const result = qMesh.dissolveEdges(edgeKeys);
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Dissolved ${edgeKeys.length} edges`);
+    return result;
+  }
+
+  /**
+   * Spin - Rotational extrusion (NEW)
+   */
+  static spinQMesh(
+    objectId: string,
+    faceIds: string[],
+    axis: THREE.Vector3,
+    angle: number,
+    steps: number
+  ): { newFaceIds: string[] } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { newFaceIds: [] };
+    }
+
+    const qMesh = sceneObject.qMesh;
+    const result = qMesh.spin(faceIds, axis, angle, steps);
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Spin: created ${result.newFaceIds.length} faces`);
+    return result;
+  }
+
+  // ========================================================================
+  // DEPRECATED: Old BufferGeometry-based Operations
+  // These are kept for backward compatibility but should be migrated to QMesh
+  // ========================================================================
+
+  /**
+   * Extrude selected faces along their average normal (DEPRECATED - Use extrudeFacesQMesh)
    */
   static extrudeFaces(
     geometry: THREE.BufferGeometry,
@@ -254,7 +480,7 @@ export class MeshOperations {
   }
 
   /**
-   * Inset faces (scale faces toward their center)
+   * Inset faces (scale faces toward their center) (DEPRECATED - Use insetFacesQMesh)
    */
   static insetFaces(
     geometry: THREE.BufferGeometry,
