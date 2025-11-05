@@ -3,10 +3,13 @@
  *
  * Provides mesh editing operations like extrude, bevel, loop cut, etc.
  * Sprint 7: Export System + Polygon Editing MVP
+ * REFACTORED: Now uses QMesh for clean topology-based operations
  */
 
 import * as THREE from 'three';
 import { splitTriangleAlongCut } from '../geometry/TriangulationUtils';
+import { useObjectsStore } from '../../stores/objectsStore';
+import type { QMesh } from '../qmesh/QMesh';
 
 export interface ExtrudeOptions {
   distance: number;
@@ -31,8 +34,85 @@ export interface KnifeCutOptions {
 }
 
 export class MeshOperations {
+  // ========================================================================
+  // NEW QMesh-based Operations (Clean, Topology-aware)
+  // ========================================================================
+
   /**
-   * Extrude selected faces along their average normal
+   * Extrude selected faces using QMesh (NEW)
+   * Returns the IDs of the newly created faces
+   */
+  static extrudeFacesQMesh(
+    objectId: string,
+    selectedFaceIds: string[],
+    distance: number
+  ): { newFaceIds: string[] } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { newFaceIds: [] };
+    }
+
+    const qMesh = sceneObject.qMesh;
+
+    // Use the clean QMesh extrude method
+    const result = qMesh.extrudeFaces(selectedFaceIds, distance);
+
+    // Update geometry in store (recompiles QMesh to renderGeometry)
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Extruded ${selectedFaceIds.length} faces, created ${result.newFaceIds.length} new faces`);
+
+    return result;
+  }
+
+  /**
+   * Inset selected faces using QMesh (NEW)
+   */
+  static insetFacesQMesh(
+    objectId: string,
+    selectedFaceIds: string[],
+    insetAmount: number
+  ): void {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return;
+    }
+
+    const qMesh = sceneObject.qMesh;
+
+    // Inset faces by moving vertices toward face center
+    selectedFaceIds.forEach(faceId => {
+      const face = qMesh.faces.get(faceId);
+      if (!face) return;
+
+      const vertices = face.getVertices();
+      const center = face.calculateCenter();
+
+      // Move each vertex toward the center
+      vertices.forEach(vertex => {
+        vertex.position.lerp(center, insetAmount);
+      });
+    });
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Inset ${selectedFaceIds.length} faces`);
+  }
+
+  // ========================================================================
+  // DEPRECATED: Old BufferGeometry-based Operations
+  // These are kept for backward compatibility but should be migrated to QMesh
+  // ========================================================================
+
+  /**
+   * Extrude selected faces along their average normal (DEPRECATED - Use extrudeFacesQMesh)
    */
   static extrudeFaces(
     geometry: THREE.BufferGeometry,
@@ -254,7 +334,7 @@ export class MeshOperations {
   }
 
   /**
-   * Inset faces (scale faces toward their center)
+   * Inset faces (scale faces toward their center) (DEPRECATED - Use insetFacesQMesh)
    */
   static insetFaces(
     geometry: THREE.BufferGeometry,

@@ -3,12 +3,13 @@
  *
  * Renders visual helpers for vertex, edge, and face selection in edit mode.
  * Sprint 7: Export System + Polygon Editing MVP
+ * REFACTORED: Now uses QMesh string IDs
  */
 
 import React, { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useEditModeStore, makeEdgeKey } from '../../stores/editModeStore';
-import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
+import { useObjectsStore } from '../../stores/objectsStore';
 
 interface EditModeHelpersProps {
   mesh: THREE.Mesh;
@@ -27,6 +28,11 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     toggleFaceSelection,
     geometryVersion, // Sprint 10: Force re-render when geometry changes (knife cuts)
   } = useEditModeStore();
+
+  // Get the SceneObject to access qMesh
+  const { objects } = useObjectsStore();
+  const sceneObject = objects.get(objectId);
+  const qMesh = sceneObject?.qMesh;
 
   // Track created geometries and materials for disposal
   const geometriesRef = useRef<THREE.BufferGeometry[]>([]);
@@ -67,12 +73,8 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
   // Only show helpers for the object being edited
   if (editingObjectId !== objectId) return null;
 
-  const geometry = mesh.geometry as THREE.BufferGeometry;
-  if (!geometry) return null;
-
-  // Get vertex positions
-  const positions = geometry.getAttribute('position');
-  if (!positions) return null;
+  // Require QMesh for visualization
+  if (!qMesh) return null;
 
   // Create shared geometries for vertex helpers (reused, not recreated)
   const sharedVertexGeometries = useMemo(() => {
@@ -106,41 +108,38 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     return { goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible, goldFace, purpleWireframe };
   }, []);
 
-  // Create vertex helpers
+  // Create vertex helpers (REFACTORED for QMesh)
   const vertexHelpers = useMemo(() => {
-    if (selectionMode !== 'vertex') return null;
+    if (selectionMode !== 'vertex' || !qMesh) return null;
 
     const vertices: JSX.Element[] = [];
-    const vertexCount = positions.count;
 
-    for (let i = 0; i < vertexCount; i++) {
-      const x = positions.getX(i);
-      const y = positions.getY(i);
-      const z = positions.getZ(i);
+    // Iterate over QMesh vertices
+    qMesh.vertices.forEach((vertex) => {
+      const { x, y, z } = vertex.position;
+      const isSelected = selectedVertices.has(vertex.id);
 
-      const isSelected = selectedVertices.has(i);
-
-      const handleVertexClick = (event: any, index: number) => {
+      const handleVertexClick = (event: any, vertexId: string) => {
         event.stopPropagation();
         const multiSelect = event.shiftKey || event.ctrlKey || event.metaKey;
-        toggleVertexSelection(index, multiSelect);
+        toggleVertexSelection(vertexId, multiSelect);
       };
 
       if (isSelected) {
         // Selected vertex with glow effect
         vertices.push(
-          <group key={`vertex-${i}`}>
+          <group key={`vertex-${vertex.id}`}>
             {/* Outer glow */}
             <mesh
               position={[x, y, z]}
-              onClick={(e) => handleVertexClick(e, i)}
+              onClick={(e) => handleVertexClick(e, vertex.id)}
               geometry={sharedVertexGeometries.outerGlow}
               material={sharedMaterials.goldGlow}
             />
             {/* Core sphere */}
             <mesh
               position={[x, y, z]}
-              onClick={(e) => handleVertexClick(e, i)}
+              onClick={(e) => handleVertexClick(e, vertex.id)}
               geometry={sharedVertexGeometries.coreSphere}
               material={sharedMaterials.yellow}
             />
@@ -150,49 +149,34 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
         // Unselected vertex - subtle
         vertices.push(
           <mesh
-            key={`vertex-${i}`}
+            key={`vertex-${vertex.id}`}
             position={[x, y, z]}
-            onClick={(e) => handleVertexClick(e, i)}
+            onClick={(e) => handleVertexClick(e, vertex.id)}
             geometry={sharedVertexGeometries.unselectedSphere}
             material={sharedMaterials.purpleDark}
           />
         );
       }
-    }
+    });
 
     return <>{vertices}</>;
-  }, [selectionMode, positions, selectedVertices, toggleVertexSelection, sharedVertexGeometries]);
+  }, [selectionMode, qMesh, selectedVertices, toggleVertexSelection, sharedVertexGeometries, sharedMaterials]);
 
-  // Create edge helpers
+  // Create edge helpers (REFACTORED for QMesh)
   const edgeHelpers = useMemo(() => {
-    if (selectionMode !== 'edge') return null;
+    if (selectionMode !== 'edge' || !qMesh) return null;
 
     const edges: JSX.Element[] = [];
 
-    // Sprint Y: Use quad edge filtering to hide triangulation diagonals
-    const quadEdgesList = getQuadEdges(geometry);
-
-    // Build edge map from quad edges only (no diagonals!)
-    const edgeMap = new Map<string, [number, number]>();
-    quadEdgesList.forEach(([v1, v2]) => {
-      const key = makeEdgeKey(v1, v2);
-      edgeMap.set(key, [v1, v2]);
-    });
+    // Get all edges from QMesh (no need for quad detection!)
+    const qMeshEdges = qMesh.getEdges();
 
     // Create edge lines using cylinders for better visibility
-    edgeMap.forEach(([v1, v2], key) => {
-      const isSelected = selectedEdges.has(key);
+    qMeshEdges.forEach(({ v1, v2, edgeKey }) => {
+      const isSelected = selectedEdges.has(edgeKey);
 
-      const point1 = new THREE.Vector3(
-        positions.getX(v1),
-        positions.getY(v1),
-        positions.getZ(v1)
-      );
-      const point2 = new THREE.Vector3(
-        positions.getX(v2),
-        positions.getY(v2),
-        positions.getZ(v2)
-      );
+      const point1 = v1.position.clone();
+      const point2 = v2.position.clone();
 
       // Calculate edge length and midpoint
       const edgeLength = point1.distanceTo(point2);
@@ -205,10 +189,10 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
         direction
       );
 
-      const handleEdgeClick = (event: any, v1: number, v2: number) => {
+      const handleEdgeClick = (event: any, v1Id: string, v2Id: string) => {
         event.stopPropagation();
         const multiSelect = event.shiftKey || event.ctrlKey || event.metaKey;
-        toggleEdgeSelection(v1, v2, multiSelect);
+        toggleEdgeSelection(v1Id, v2Id, multiSelect);
       };
 
       if (isSelected) {
@@ -218,12 +202,12 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
         const coreCyl = getCylinderGeometry(0.0075, 0.0075, edgeLength, 8);  // Was 0.015
 
         edges.push(
-          <group key={`edge-${key}-group`}>
+          <group key={`edge-${edgeKey}-group`}>
             {/* Outer glow cylinder */}
             <mesh
               position={midpoint}
               quaternion={quaternion}
-              onClick={(e) => handleEdgeClick(e, v1, v2)}
+              onClick={(e) => handleEdgeClick(e, v1.id, v2.id)}
               geometry={outerCyl}
               material={sharedMaterials.goldGlow}
             />
@@ -232,14 +216,14 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
             <mesh
               position={midpoint}
               quaternion={quaternion}
-              onClick={(e) => handleEdgeClick(e, v1, v2)}
+              onClick={(e) => handleEdgeClick(e, v1.id, v2.id)}
               geometry={coreCyl}
               material={sharedMaterials.yellowEdge}
             />
 
             {/* Endpoint spheres for emphasis */}
-            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpoint} material={sharedMaterials.goldSolid} />
-            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpoint} material={sharedMaterials.goldSolid} />
+            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1.id, v2.id)} geometry={sharedVertexGeometries.edgeEndpoint} material={sharedMaterials.goldSolid} />
+            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1.id, v2.id)} geometry={sharedVertexGeometries.edgeEndpoint} material={sharedMaterials.goldSolid} />
           </group>
         );
       } else {
@@ -249,11 +233,11 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
         const visibleCyl = getCylinderGeometry(0.004, 0.004, edgeLength, 6); // Was 0.008
 
         edges.push(
-          <group key={`edge-${key}`}>
+          <group key={`edge-${edgeKey}`}>
             {/* Invisible thick cylinder for easier clicking */}
             <mesh
               position={midpoint}
-              onClick={(e) => handleEdgeClick(e, v1, v2)}
+              onClick={(e) => handleEdgeClick(e, v1.id, v2.id)}
               quaternion={quaternion}
               geometry={clickCyl}
               material={sharedMaterials.invisible}
@@ -263,181 +247,100 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
             <mesh
               position={midpoint}
               quaternion={quaternion}
-              onClick={(e) => handleEdgeClick(e, v1, v2)}
+              onClick={(e) => handleEdgeClick(e, v1.id, v2.id)}
               geometry={visibleCyl}
               material={sharedMaterials.purpleGlow}
             />
 
             {/* Endpoint spheres for better visibility */}
-            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpointSmall} material={sharedMaterials.purpleDarkEdge} />
-            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1, v2)} geometry={sharedVertexGeometries.edgeEndpointSmall} material={sharedMaterials.purpleDarkEdge} />
+            <mesh position={point1} onClick={(e) => handleEdgeClick(e, v1.id, v2.id)} geometry={sharedVertexGeometries.edgeEndpointSmall} material={sharedMaterials.purpleDarkEdge} />
+            <mesh position={point2} onClick={(e) => handleEdgeClick(e, v1.id, v2.id)} geometry={sharedVertexGeometries.edgeEndpointSmall} material={sharedMaterials.purpleDarkEdge} />
           </group>
         );
       }
     });
 
     return <>{edges}</>;
-  }, [selectionMode, geometry, positions, selectedEdges, toggleEdgeSelection, sharedVertexGeometries, sharedMaterials, getCylinderGeometry, geometryVersion]); // Sprint 10: Re-compute after knife cuts
+  }, [selectionMode, qMesh, selectedEdges, toggleEdgeSelection, sharedVertexGeometries, sharedMaterials, getCylinderGeometry, geometryVersion]);
 
-  // Create face helpers
+  // Create face helpers (REFACTORED for QMesh - supports quads and N-gons!)
   const faceHelpers = useMemo(() => {
-    if (selectionMode !== 'face') return null;
+    if (selectionMode !== 'face' || !qMesh) return null;
 
     const faces: JSX.Element[] = [];
-    const indices = geometry.index;
 
-    if (indices) {
-      const indexArray = indices.array;
-      const faceCount = indexArray.length / 3;
+    // Iterate over QMesh faces
+    qMesh.faces.forEach((face) => {
+      const isSelected = selectedFaces.has(face.id);
 
-      for (let faceIndex = 0; faceIndex < faceCount; faceIndex++) {
-        const i = faceIndex * 3;
-        const a = indexArray[i];
-        const b = indexArray[i + 1];
-        const c = indexArray[i + 2];
+      // Only visualize selected faces
+      if (!isSelected) return;
 
-        const isSelected = selectedFaces.has(faceIndex);
+      const handleFaceClick = (event: any, faceId: string) => {
+        event.stopPropagation();
+        const multiSelect = event.shiftKey || event.ctrlKey || event.metaKey;
+        toggleFaceSelection(faceId, multiSelect);
+      };
 
-        const handleFaceClick = (event: any, fIndex: number) => {
-          event.stopPropagation();
-          const multiSelect = event.shiftKey || event.ctrlKey || event.metaKey;
-          toggleFaceSelection(fIndex, multiSelect);
-        };
+      // Get face vertices
+      const vertices = face.getVertices();
+      if (vertices.length < 3) return;
 
-        if (isSelected) {
-          // Create a highlighted face overlay
-          const faceVertices = [
-            new THREE.Vector3(
-              positions.getX(a),
-              positions.getY(a),
-              positions.getZ(a)
-            ),
-            new THREE.Vector3(
-              positions.getX(b),
-              positions.getY(b),
-              positions.getZ(b)
-            ),
-            new THREE.Vector3(
-              positions.getX(c),
-              positions.getY(c),
-              positions.getZ(c)
-            ),
-          ];
+      // Create geometry for this face (triangulate for rendering)
+      const faceGeometry = new THREE.BufferGeometry();
+      geometriesRef.current.push(faceGeometry); // Track for disposal
 
-          const faceGeometry = new THREE.BufferGeometry();
-          geometriesRef.current.push(faceGeometry); // Track for disposal
+      // Triangulate the face using fan triangulation
+      const positions: number[] = [];
+      const normals: number[] = [];
 
-          const vertices = new Float32Array([
-            ...faceVertices[0].toArray(),
-            ...faceVertices[1].toArray(),
-            ...faceVertices[2].toArray(),
-          ]);
-          faceGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      // Calculate face normal
+      const normal = face.calculateNormal();
 
-          // Calculate face normal for proper lighting
-          const normal = new THREE.Vector3();
-          const edge1 = faceVertices[1].clone().sub(faceVertices[0]);
-          const edge2 = faceVertices[2].clone().sub(faceVertices[0]);
-          normal.crossVectors(edge1, edge2).normalize();
+      // Fan triangulation from first vertex
+      for (let i = 1; i < vertices.length - 1; i++) {
+        // Triangle: v0, vi, vi+1
+        positions.push(...vertices[0].position.toArray());
+        positions.push(...vertices[i].position.toArray());
+        positions.push(...vertices[i + 1].position.toArray());
 
-          const normals = new Float32Array([
-            ...normal.toArray(),
-            ...normal.toArray(),
-            ...normal.toArray(),
-          ]);
-          faceGeometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-
-          faces.push(
-            <mesh
-              key={`face-${faceIndex}`}
-              onClick={(e) => handleFaceClick(e, faceIndex)}
-              geometry={faceGeometry}
-              material={sharedMaterials.goldFace}
-            />
-          );
-        }
+        // Same normal for all vertices in this triangle
+        normals.push(...normal.toArray());
+        normals.push(...normal.toArray());
+        normals.push(...normal.toArray());
       }
-    } else {
-      // Non-indexed geometry
-      const vertexCount = positions.count;
-      const faceCount = vertexCount / 3;
 
-      for (let faceIndex = 0; faceIndex < faceCount; faceIndex++) {
-        const i = faceIndex * 3;
+      faceGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+      faceGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals), 3));
 
-        const isSelected = selectedFaces.has(faceIndex);
-
-        if (isSelected) {
-          const faceVertices = [
-            new THREE.Vector3(
-              positions.getX(i),
-              positions.getY(i),
-              positions.getZ(i)
-            ),
-            new THREE.Vector3(
-              positions.getX(i + 1),
-              positions.getY(i + 1),
-              positions.getZ(i + 1)
-            ),
-            new THREE.Vector3(
-              positions.getX(i + 2),
-              positions.getY(i + 2),
-              positions.getZ(i + 2)
-            ),
-          ];
-
-          const faceGeometry = new THREE.BufferGeometry();
-          geometriesRef.current.push(faceGeometry); // Track for disposal
-
-          const vertices = new Float32Array([
-            ...faceVertices[0].toArray(),
-            ...faceVertices[1].toArray(),
-            ...faceVertices[2].toArray(),
-          ]);
-          faceGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-
-          // Calculate face normal
-          const normal = new THREE.Vector3();
-          const edge1 = faceVertices[1].clone().sub(faceVertices[0]);
-          const edge2 = faceVertices[2].clone().sub(faceVertices[0]);
-          normal.crossVectors(edge1, edge2).normalize();
-
-          const normals = new Float32Array([
-            ...normal.toArray(),
-            ...normal.toArray(),
-            ...normal.toArray(),
-          ]);
-          faceGeometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-
-          faces.push(
-            <mesh
-              key={`face-${faceIndex}`}
-              geometry={faceGeometry}
-              material={sharedMaterials.goldFace}
-            />
-          );
-        }
-      }
-    }
+      faces.push(
+        <mesh
+          key={`face-${face.id}`}
+          onClick={(e) => handleFaceClick(e, face.id)}
+          geometry={faceGeometry}
+          material={sharedMaterials.goldFace}
+        />
+      );
+    });
 
     return <>{faces}</>;
-  }, [selectionMode, geometry, positions, selectedFaces, toggleFaceSelection, sharedMaterials.goldFace]);
+  }, [selectionMode, qMesh, selectedFaces, toggleFaceSelection, sharedMaterials.goldFace]);
 
-  // Create edges geometry for face mode wireframe (Sprint Y: Use quad edges only!)
+  // Create edges geometry for face mode wireframe (REFACTORED for QMesh)
   const edgesGeometry = useMemo(() => {
-    if (selectionMode !== 'face') return null;
+    if (selectionMode !== 'face' || !qMesh) return null;
 
-    // Use quad edge filtering to hide triangulation diagonals
-    const quadEdgesList = getQuadEdges(geometry);
+    // Get all edges from QMesh
+    const edges = qMesh.getEdges();
 
-    // Create BufferGeometry with quad edges only
+    // Create BufferGeometry with edges
     const edgesGeo = new THREE.BufferGeometry();
     const edgePositions: number[] = [];
 
-    quadEdgesList.forEach(([v0, v1]) => {
+    edges.forEach(({ v1, v2 }) => {
       edgePositions.push(
-        positions.getX(v0), positions.getY(v0), positions.getZ(v0),
-        positions.getX(v1), positions.getY(v1), positions.getZ(v1)
+        ...v1.position.toArray(),
+        ...v2.position.toArray()
       );
     });
 
@@ -445,7 +348,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     geometriesRef.current.push(edgesGeo); // Track for disposal
 
     return edgesGeo;
-  }, [selectionMode, geometry, positions, geometryVersion]); // Sprint 10: Re-compute when geometry changes (knife cuts)
+  }, [selectionMode, qMesh, geometryVersion]);
 
   // Add wireframe overlay for better face visibility in face mode
   const wireframeOverlay = useMemo(() => {
