@@ -31,6 +31,7 @@ export function EditOperationsPanel() {
     selectedEdges,
     selectedFaces,
     hasSelection,
+    clearSelection,
   } = useEditModeStore();
 
   const { objects, transformMode, setTransformMode } = useObjectsStore();
@@ -48,6 +49,18 @@ export function EditOperationsPanel() {
   // Store original geometry for preview
   const originalGeometryRef = useRef<THREE.BufferGeometry | null>(null);
   const lastPreviewValuesRef = useRef({ extrudeDistance: 1.0, insetAmount: 0.1 });
+
+  // Helper function to convert QMesh face IDs to numeric indices
+  const convertFaceIdsToIndices = (faceIds: Set<string>): Set<number> => {
+    const indices = new Set<number>();
+    faceIds.forEach(faceId => {
+      const match = faceId.match(/f_(\d+)/);
+      if (match) {
+        indices.add(parseInt(match[1], 10));
+      }
+    });
+    return indices;
+  };
 
   // Helper function to store original geometry
   const storeOriginalGeometry = () => {
@@ -187,7 +200,7 @@ export function EditOperationsPanel() {
       // that knows how to undo to the original state
       const command = new ExtrudeFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         extrudeDistance
       );
 
@@ -224,7 +237,7 @@ export function EditOperationsPanel() {
       // Apply operation without preview using command
       const command = new ExtrudeFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         extrudeDistance
       );
       executeCommand(command);
@@ -267,7 +280,7 @@ export function EditOperationsPanel() {
       // that knows how to undo to the original state
       const command = new InsetFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         insetAmount
       );
 
@@ -307,7 +320,7 @@ export function EditOperationsPanel() {
       // Apply operation without preview using command
       const command = new InsetFacesCommand(
         editingObjectId,
-        selectedFaces,
+        convertFaceIdsToIndices(selectedFaces),
         insetAmount
       );
       executeCommand(command);
@@ -349,7 +362,7 @@ export function EditOperationsPanel() {
       },
     };
 
-    useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
+    useObjectsStore.getState().updateObject(editingObjectId, { importedGeometry: geometryData });
   };
 
   const handleInsetPreviewStart = () => {
@@ -371,6 +384,7 @@ export function EditOperationsPanel() {
       console.warn('Subdivide requires face selection');
       return;
     }
+    if (!editingObjectId) return;
 
     // Get the mesh from registry
     const mesh = meshRegistry.getMesh(editingObjectId);
@@ -380,12 +394,12 @@ export function EditOperationsPanel() {
     }
 
     // Store old geometry for undo
-    const oldGeometry = mesh.geometry.clone();
+    // const oldGeometry = mesh.geometry.clone(); // TODO: Implement undo for subdivide
 
     // Perform subdivide operation
     MeshOperations.subdivideFaces(
       mesh.geometry,
-      selectedFaces,
+      convertFaceIdsToIndices(selectedFaces),
       subdivisions
     );
 
@@ -419,7 +433,7 @@ export function EditOperationsPanel() {
     };
 
     // Update object in store
-    useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
+    useObjectsStore.getState().updateObject(editingObjectId, { importedGeometry: geometryData });
 
     // Clear selection after subdivision
     clearSelection();
