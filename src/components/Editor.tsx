@@ -281,8 +281,8 @@ export function Editor() {
         // Return object with updated geometry data
         return {
           ...obj,
-          geometry: {
-            ...obj.geometry,
+          importedGeometry: {
+            ...obj.importedGeometry,
             data: geometryData,
           }
         };
