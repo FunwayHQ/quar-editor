@@ -3,9 +3,11 @@
  *
  * Manages keyframe animations, tracks, and playback state.
  * Sprint 6: Animation System & Timeline
+ * Extended for bone animations in Bones & Skeletal Animation Sprint
  */
 
 import { create } from 'zustand';
+import type { BonePose } from './objectsStore';
 
 // Interpolation types
 export type InterpolationType = 'linear' | 'bezier' | 'step';
@@ -24,12 +26,17 @@ export interface Keyframe {
 export interface AnimationTrack {
   id: string;
   objectId: string;          // Which object is being animated
-  property: string;          // 'position', 'rotation', 'scale', 'materialProperty', 'shapeKey'
+  property: string;          // 'position', 'rotation', 'scale', 'materialProperty', 'shapeKey', 'boneTransform'
   propertyPath: string[];    // Path to the property e.g., ['position', 'x'] or ['lightProps', 'intensity'] or ['shapeKey', 'shapeKeyId']
   keyframes: Keyframe[];
   enabled: boolean;
   color?: string;            // Track color in timeline UI
   shapeKeyId?: string;       // For shape key tracks
+
+  // Bone animation properties
+  boneId?: string;                           // Which bone is being animated (for bone tracks)
+  transformType?: 'position' | 'rotation' | 'scale';  // What transform property
+  space?: 'local' | 'pose';                  // Local = relative to parent, Pose = relative to rest
 }
 
 // Animation (collection of tracks)
@@ -42,6 +49,21 @@ export interface Animation {
   enabled: boolean;
   createdAt: number;
   modifiedAt: number;
+}
+
+// Pose library for storing and reusing bone poses
+export interface PoseLibrary {
+  id: string;
+  name: string;
+  poses: Map<string, StoredPose>;
+}
+
+export interface StoredPose {
+  id: string;
+  name: string;
+  bonePoses: Map<string, BonePose>;     // boneId -> pose
+  thumbnail?: string;                    // Base64 encoded image
+  createdAt: number;
 }
 
 // Animation state
