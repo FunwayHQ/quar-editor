@@ -14,6 +14,7 @@ import { useEditModePicking } from '../../hooks/useEditModePicking';
 import { EditModeHelpers } from './EditModeHelpers';
 import { KnifeFaceHighlight } from './KnifeFaceHighlight';
 import { BoneRenderer } from './BoneRenderer';
+import { SkinnedMeshRenderer } from './SkinnedMeshRenderer';
 import { useBoneStore } from '../../stores/boneStore';
 import { useEditModeStore } from '../../stores/editModeStore';
 import { useKnifeToolStore } from '../../stores/knifeToolStore';
@@ -826,8 +827,14 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   // Render meshes with hierarchy support
   return (
     <group position={object.position} rotation={object.rotation} scale={object.scale}>
+      {/* Render skinned mesh with deformation */}
+      {object.skinData && !isEditMode && (
+        <SkinnedMeshRenderer meshId={object.id} />
+      )}
+
       {/* Only render mesh if geometry exists (groups have no geometry) */}
-      {geometry && (
+      {/* Skip regular mesh rendering for skinned meshes unless in edit mode */}
+      {geometry && (!object.skinData || isEditMode) && (
         <>
           <mesh
             ref={meshRef}
