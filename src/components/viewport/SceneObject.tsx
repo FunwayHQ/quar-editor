@@ -30,15 +30,22 @@ import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
 // Sprint Y: Memoized knife wireframe to prevent memory leak
 function KnifeWireframe({ geometry }: { geometry: THREE.BufferGeometry }) {
   const edgesGeo = useMemo(() => {
+    if (!geometry || !geometry.attributes || !geometry.attributes.position) {
+      console.warn('[KnifeWireframe] Invalid geometry');
+      return new THREE.BufferGeometry();
+    }
+
     const quadEdgesList = getQuadEdges(geometry);
     const positions = geometry.attributes.position;
     const edgePositions: number[] = [];
 
     quadEdgesList.forEach(([v0, v1]) => {
-      edgePositions.push(
-        positions.getX(v0), positions.getY(v0), positions.getZ(v0),
-        positions.getX(v1), positions.getY(v1), positions.getZ(v1)
-      );
+      if (v0 < positions.count && v1 < positions.count) {
+        edgePositions.push(
+          positions.getX(v0), positions.getY(v0), positions.getZ(v0),
+          positions.getX(v1), positions.getY(v1), positions.getZ(v1)
+        );
+      }
     });
 
     const geo = new THREE.BufferGeometry();
@@ -160,6 +167,16 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     // PRIORITY 1: NEW QMesh Architecture - Use renderGeometry if it exists
     if (object.renderGeometry) {
       console.log(`[SceneObject] Using QMesh renderGeometry for ${object.name}`);
+
+      // CRITICAL: Ensure bounding sphere exists for frustum culling
+      // Without this, Three.js will crash when trying to check object visibility
+      if (!object.renderGeometry.boundingSphere) {
+        object.renderGeometry.computeBoundingSphere();
+      }
+      if (!object.renderGeometry.boundingBox) {
+        object.renderGeometry.computeBoundingBox();
+      }
+
       return object.renderGeometry;
     }
 
@@ -306,11 +323,16 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     // 1. We have geometry (created above)
     // 2. We don't have QMesh yet
     // 3. This is not a light or group (they don't have editable geometry)
-    if (geometry && !object.qMesh && !isLight && object.type !== 'group') {
+    // 4. NOT a Boolean operation result (they have arbitrary triangle topology)
+    const isBooleanResult = object.name.includes('_union_') || object.name.includes('_minus_') || object.name.includes('_intersect_');
+
+    if (geometry && !object.qMesh && !isLight && object.type !== 'group' && !isBooleanResult) {
       console.log(`[SceneObject] Initializing QMesh for ${object.name}`);
       initializeGeometryFromBufferGeometry(object.id, geometry);
+    } else if (isBooleanResult) {
+      console.log(`[SceneObject] Skipping QMesh for Boolean result: ${object.name} (using BufferGeometry directly)`);
     }
-  }, [object.id, object.qMesh, geometry, isLight, object.type, initializeGeometryFromBufferGeometry]);
+  }, [object.id, object.name, object.qMesh, geometry, isLight, object.type, initializeGeometryFromBufferGeometry]);
 
   // Memoize material color separately to prevent full material recreation
   const materialColor = useMemo(() => {
@@ -456,7 +478,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     const currentGeometry = geometry;
 
     return () => {
-      if (currentGeometry) {
+      if (currentGeometry && typeof currentGeometry.dispose === 'function') {
         currentGeometry.dispose();
       }
     };

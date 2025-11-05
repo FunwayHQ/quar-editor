@@ -43,6 +43,7 @@ export function Editor() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false); // Track if project has been loaded
   const { isEditMode } = useEditModeStore();
   const { isActive: isKnifeActive } = useKnifeToolStore();
 
@@ -54,12 +55,17 @@ export function Editor() {
   // Enable auto-keyframing
   useAnimationKeyframes();
 
-  // Load project on mount
+  // Reset hasLoaded when projectId changes (to allow loading different projects)
   useEffect(() => {
-    if (projectId) {
+    setHasLoaded(false);
+  }, [projectId]);
+
+  // Load project on mount (with guard against StrictMode double-mount)
+  useEffect(() => {
+    if (projectId && !hasLoaded) {
       loadProject(projectId);
     }
-  }, [projectId]);
+  }, [projectId, hasLoaded]);
 
   // Auto-save every 30 seconds
   useEffect(() => {
@@ -92,6 +98,7 @@ export function Editor() {
   async function loadProject(id: string) {
     try {
       setLoading(true);
+      setHasLoaded(true); // Mark as loaded to prevent double-load in StrictMode
       const data = await storage.getProject(id);
       if (!data) {
         alert('Project not found');
