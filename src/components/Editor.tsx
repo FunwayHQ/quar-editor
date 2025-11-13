@@ -37,7 +37,9 @@ import { meshRegistry } from '../lib/mesh/MeshRegistry';
 export function Editor() {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { setLastSaveTime, isOffline } = useAppStore();
+  // Use selectors to subscribe only to needed state
+  const setLastSaveTime = useAppStore((state) => state.setLastSaveTime);
+  const isOffline = useAppStore((state) => state.isOffline);
   const { success, error: showError } = useToastStore();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);

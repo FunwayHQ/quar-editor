@@ -10,17 +10,14 @@ import App from './App';
 import './index.css';
 import { initializeDatabase } from './lib/storage/db';
 
-// Service worker disabled for development
-// TODO: Re-enable for production build
-/*
-if ('serviceWorker' in navigator) {
+// Register service worker only in production builds
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((error) => {
       console.error('Service Worker registration failed:', error);
     });
   });
 }
-*/
 
 // Initialize database before rendering app
 async function init() {
