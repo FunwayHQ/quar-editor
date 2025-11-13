@@ -17,7 +17,7 @@ const mockEditModeStore = {
   selectionMode: 'face' as const,
   selectedVertices: new Set(),
   selectedEdges: new Set(),
-  selectedFaces: new Set([0, 1]),
+  selectedFaces: new Set(['f_0', 'f_1']),
   hasSelection: vi.fn(() => true),
 };
 
@@ -91,7 +91,7 @@ describe('EditOperationsPanel', () => {
     mockEditModeStore.selectionMode = 'face';
     mockEditModeStore.selectedVertices = new Set();
     mockEditModeStore.selectedEdges = new Set();
-    mockEditModeStore.selectedFaces = new Set([0, 1]);
+    mockEditModeStore.selectedFaces = new Set(['f_0', 'f_1']);
     // Fix hasSelection to return true when faces are selected
     mockEditModeStore.hasSelection = vi.fn(() => mockEditModeStore.selectedFaces.size > 0 || mockEditModeStore.selectedVertices.size > 0 || mockEditModeStore.selectedEdges.size > 0);
   });

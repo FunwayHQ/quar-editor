@@ -25,10 +25,10 @@ console.warn = (...args: any[]) => {
 
 // Cleanup after each test
 afterEach(() => {
+  // Cleanup React components first
   cleanup();
 
-  // Clear all Zustand store subscriptions to prevent re-entrancy issues
-  // This ensures stores start fresh between tests
+  // Clear all mocks after cleanup
   vi.clearAllMocks();
 });
 
