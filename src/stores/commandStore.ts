@@ -33,22 +33,22 @@ export const useCommandStore = create<CommandState>((set, get) => ({
   executeCommand: (command) => {
     const { history } = get();
     history.execute(command);
-    // Trigger re-render
-    set({ history });
+    // Force new state object to trigger re-render
+    set((state) => ({ ...state }));
   },
 
   undo: () => {
     const { history } = get();
     history.undo();
-    // Trigger re-render
-    set({ history });
+    // Force new state object to trigger re-render
+    set((state) => ({ ...state }));
   },
 
   redo: () => {
     const { history } = get();
     history.redo();
-    // Trigger re-render
-    set({ history });
+    // Force new state object to trigger re-render
+    set((state) => ({ ...state }));
   },
 
   canUndo: () => {
@@ -70,7 +70,7 @@ export const useCommandStore = create<CommandState>((set, get) => ({
   clearHistory: () => {
     const { history } = get();
     history.clear();
-    // Trigger re-render
-    set({ history });
+    // Force new state object to trigger re-render
+    set((state) => ({ ...state }));
   },
 }));

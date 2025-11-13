@@ -13,7 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 export function WelcomeScreen() {
   const navigate = useNavigate();
-  const { isOffline } = useAppStore();
+  // Use selector to subscribe only to needed state
+  const isOffline = useAppStore((state) => state.isOffline);
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [loading, setLoading] = useState(true);
 

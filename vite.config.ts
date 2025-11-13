@@ -3,6 +3,23 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 
+// Shared resolve configuration to avoid duplication
+const sharedResolve = {
+  alias: {
+    '@': path.resolve(__dirname, './src'),
+    'react': path.resolve(__dirname, './node_modules/react'),
+    'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
+    'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime'),
+    'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime'),
+    // Sprint Y: Force single Three.js instance
+    'three': path.resolve(__dirname, './node_modules/three'),
+    '@react-three/fiber': path.resolve(__dirname, './node_modules/@react-three/fiber'),
+    '@react-three/drei': path.resolve(__dirname, './node_modules/@react-three/drei'),
+    'zustand': path.resolve(__dirname, './node_modules/zustand'),
+  },
+  dedupe: ['react', 'react-dom', 'three', 'zustand', '@react-three/fiber', '@react-three/drei']
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -52,31 +69,16 @@ export default defineConfig({
       }
     })
   ],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      'react': path.resolve(__dirname, './node_modules/react'),
-      'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
-      'react/jsx-runtime': path.resolve(__dirname, './node_modules/react/jsx-runtime'),
-      'react/jsx-dev-runtime': path.resolve(__dirname, './node_modules/react/jsx-dev-runtime'),
-      // Sprint Y: Force single Three.js instance
-      'three': path.resolve(__dirname, './node_modules/three'),
-      '@react-three/fiber': path.resolve(__dirname, './node_modules/@react-three/fiber'),
-      '@react-three/drei': path.resolve(__dirname, './node_modules/@react-three/drei'),
-      'zustand': path.resolve(__dirname, './node_modules/zustand'),
-    },
-    dedupe: ['react', 'react-dom', 'three', 'zustand', '@react-three/fiber', '@react-three/drei']
-  },
+  resolve: sharedResolve,
   server: {
-    port: 3001,
+    port: 3000,
     hmr: {
       overlay: true,
-      port: 3001
+      port: 3000
     },
     watch: {
       usePolling: true
-    },
-    force: true
+    }
   },
   optimizeDeps: {
     exclude: ['@playwright/test', 'playwright-core'], // Don't pre-bundle Playwright
@@ -89,8 +91,7 @@ export default defineConfig({
       '@react-three/fiber',
       '@react-three/drei',
       'zustand'
-    ],
-    force: true // Force re-optimization
+    ]
   },
   build: {
     target: 'esnext',
@@ -109,19 +110,8 @@ export default defineConfig({
         singleFork: true  // Run all tests in single process
       }
     },
-    // Force single Three.js instance
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, './src'),
-        'react': path.resolve(__dirname, './node_modules/react'),
-        'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
-        'three': path.resolve(__dirname, './node_modules/three'),
-        '@react-three/fiber': path.resolve(__dirname, './node_modules/@react-three/fiber'),
-        '@react-three/drei': path.resolve(__dirname, './node_modules/@react-three/drei'),
-        'zustand': path.resolve(__dirname, './node_modules/zustand'),
-      },
-      dedupe: ['react', 'react-dom', 'three', 'zustand', '@react-three/fiber', '@react-three/drei']
-    },
+    // Reuse shared resolve configuration
+    resolve: sharedResolve,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

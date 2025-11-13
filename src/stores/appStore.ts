@@ -82,3 +82,12 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
+
+// Monitor online/offline status at the module level
+if (typeof window !== 'undefined') {
+  const handleOnline = () => useAppStore.getState().setIsOffline(false);
+  const handleOffline = () => useAppStore.getState().setIsOffline(true);
+
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+}

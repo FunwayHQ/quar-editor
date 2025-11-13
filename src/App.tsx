@@ -13,21 +13,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
 
 function App() {
-  const { theme, setIsOffline } = useAppStore();
-
-  // Monitor online/offline status
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [setIsOffline]);
+  // Use selectors to subscribe only to needed state
+  const theme = useAppStore((state) => state.theme);
 
   // Apply theme to document
   useEffect(() => {
@@ -36,24 +23,26 @@ function App() {
   }, [theme]);
 
   return (
-    <ErrorBoundary>
+    <>
       <BrowserRouter
         future={{
           v7_startTransition: true,
           v7_relativeSplatPath: true,
         }}
       >
-        <Routes>
-          <Route path="/" element={<WelcomeScreen />} />
-          <Route path="/editor" element={<Editor />} />
-          <Route path="/editor/:projectId" element={<Editor />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<WelcomeScreen />} />
+            <Route path="/editor" element={<Editor />} />
+            <Route path="/editor/:projectId" element={<Editor />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </BrowserRouter>
 
-      {/* Global Toast Container */}
+      {/* Global Toast Container - outside ErrorBoundary to prevent toast errors from crashing the app */}
       <ToastContainer />
-    </ErrorBoundary>
+    </>
   );
 }
 
