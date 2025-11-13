@@ -26,6 +26,10 @@ console.warn = (...args: any[]) => {
 // Cleanup after each test
 afterEach(() => {
   cleanup();
+
+  // Clear all Zustand store subscriptions to prevent re-entrancy issues
+  // This ensures stores start fresh between tests
+  vi.clearAllMocks();
 });
 
 // Mock IndexedDB

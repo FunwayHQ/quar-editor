@@ -7,7 +7,11 @@ import { useBooleanOperationsStore } from '../booleanOperationsStore';
 
 describe('booleanOperationsStore', () => {
   beforeEach(() => {
-    useBooleanOperationsStore.getState().reset();
+    // Reset store directly using setState to avoid re-entrancy issues
+    useBooleanOperationsStore.setState({
+      activeOperation: null,
+      keepOriginals: false
+    });
   });
 
   describe('setActiveOperation()', () => {
