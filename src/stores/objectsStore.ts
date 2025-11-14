@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import * as THREE from 'three';
 import { calculateGroupCenter, wouldCreateCircularDependency } from '../lib/hierarchy/TransformUtils';
 import { QMesh } from '../lib/qmesh/QMesh';
+import { meshRegistry } from '../lib/mesh/MeshRegistry';
 
 export type ObjectType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus' | 'plane' | 'group' | 'camera' | 'imported' | 'pointLight' | 'spotLight' | 'directionalLight' | 'ambientLight' | 'bone' | 'armature';
 
@@ -693,8 +694,6 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
   // Serialization
   serialize: () => {
     const state = get();
-    // Import meshRegistry dynamically to avoid circular dependencies
-    const { meshRegistry } = require('../lib/mesh/MeshRegistry');
 
     // Serialize objects with current geometry from mesh registry
     const objects = Array.from(state.objects.values()).map(obj => {

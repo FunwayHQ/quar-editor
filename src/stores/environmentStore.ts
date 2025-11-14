@@ -57,7 +57,7 @@ export interface EnvironmentState {
   deserialize: (data: any) => void;
 }
 
-export const useEnvironmentStore = create<EnvironmentState>((set) => ({
+export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   // Initial values
   backgroundColor: '#0A0A0B',
 
