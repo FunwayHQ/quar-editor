@@ -5,19 +5,15 @@
  * Will be fully implemented in Sprint 3 (3D Viewport Foundation).
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Download, FileDown } from 'lucide-react';
-import * as THREE from 'three';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
 import { useAppStore } from '../stores/appStore';
 import { useToastStore } from '../stores/toastStore';
-import { useObjectsStore } from '../stores/objectsStore';
-import { useMaterialsStore } from '../stores/materialsStore';
-import { useAnimationStore } from '../stores/animationStore';
-import { useEnvironmentStore } from '../stores/environmentStore';
-import { useMorphTargetStore } from '../stores/morphTargetStore';
-import { useCurveStore } from '../stores/curveStore';
+import { serializeScene } from '../services/sceneSerializer';
+import { useLoadProject } from '../hooks/useLoadProject';
+import { useAutoSave } from '../hooks/useAutoSave';
 import { Viewport } from './viewport/Viewport';
 import { HierarchyPanel } from './panels/HierarchyPanel';
 import { RightSidebar } from './panels/RightSidebar';
@@ -32,7 +28,6 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useAnimationKeyframes } from '../hooks/useAnimationKeyframes';
 import { useEditModeStore } from '../stores/editModeStore';
 import { useKnifeToolStore } from '../stores/knifeToolStore';
-import { meshRegistry } from '../lib/mesh/MeshRegistry';
 
 export function Editor() {
   const { projectId } = useParams();
@@ -45,7 +40,6 @@ export function Editor() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [hasLoaded, setHasLoaded] = useState(false); // Track if project has been loaded
   const { isEditMode } = useEditModeStore();
   const { isActive: isKnifeActive } = useKnifeToolStore();
 
@@ -57,319 +51,37 @@ export function Editor() {
   // Enable auto-keyframing
   useAnimationKeyframes();
 
-  // Reset hasLoaded when projectId changes (to allow loading different projects)
-  useEffect(() => {
-    setHasLoaded(false);
-  }, [projectId]);
-
-  // Load project on mount (with guard against StrictMode double-mount)
-  useEffect(() => {
-    if (projectId && !hasLoaded) {
-      loadProject(projectId);
-    }
-  }, [projectId, hasLoaded]);
-
-  // Auto-save every 30 seconds
-  useEffect(() => {
-    if (!project) return;
-
-    const autoSaveInterval = setInterval(async () => {
-      try {
-        const sceneData = serializeSceneData();
-
-        const updatedProject = {
-          ...project,
-          sceneData,
-          lastModified: new Date(),
-        };
-
-        await storage.saveProject(updatedProject);
-        setProject(updatedProject);
-        setLastSaveTime(new Date());
-        console.log('[Editor] Auto-save completed');
-        // Silent auto-save - no toast notification to avoid spam
-      } catch (err) {
-        console.error('[Editor] Auto-save failed:', err);
-        showError('Auto-save failed. Please save manually.');
-      }
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(autoSaveInterval);
-  }, [project]);
-
-  async function loadProject(id: string) {
-    try {
-      setLoading(true);
-      setHasLoaded(true); // Mark as loaded to prevent double-load in StrictMode
-      const data = await storage.getProject(id);
-      if (!data) {
-        alert('Project not found');
-        navigate('/');
-        return;
-      }
+  // Load project using custom hook
+  useLoadProject({
+    projectId,
+    onLoadStart: () => setLoading(true),
+    onLoadComplete: (data) => {
       setProject(data);
-
-      // Restore scene data into stores
-      if (data.sceneData) {
-        const scene = data.sceneData as any;
-
-        // Restore objects
-        if (scene.objects) {
-          console.log(`[Editor] Loading ${scene.objects.length} objects from saved data`);
-          scene.objects.forEach((obj: any) => {
-            // Log if object has saved geometry data
-            if (obj.geometry?.data) {
-              console.log(`[Editor] Object ${obj.name} has saved geometry data (${obj.geometry.data.attributes?.position?.array.length / 3} vertices)`);
-            }
-            useObjectsStore.getState().objects.set(obj.id, obj);
-          });
-        }
-
-        // Restore materials
-        if (scene.materials) {
-          scene.materials.forEach((mat: any) => {
-            useMaterialsStore.getState().materials.set(mat.id, mat);
-          });
-          if (scene.objectMaterials) {
-            scene.objectMaterials.forEach(([objId, matId]: [string, string]) => {
-              useMaterialsStore.getState().objectMaterials.set(objId, matId);
-            });
-          }
-        }
-
-        // Restore animations
-        if (scene.animations) {
-          scene.animations.forEach((anim: any) => {
-            useAnimationStore.getState().animations.set(anim.id, anim);
-          });
-          if (scene.activeAnimationId) {
-            useAnimationStore.getState().setActiveAnimation(scene.activeAnimationId);
-          }
-        }
-
-        // Restore environment
-        if (scene.environment) {
-          useEnvironmentStore.setState(scene.environment);
-        }
-
-        // Restore curves
-        if (scene.curves) {
-          console.log(`[Editor] Loading ${scene.curves.length} curves from saved data`);
-          scene.curves.forEach((curveData: any) => {
-            const curve = {
-              ...curveData,
-              // Convert back to Vector2/Vector3/Euler
-              points: curveData.points.map((p: any) => new THREE.Vector2(p.x, p.y)),
-              transform: {
-                position: new THREE.Vector3(
-                  curveData.transform.position.x,
-                  curveData.transform.position.y,
-                  curveData.transform.position.z
-                ),
-                rotation: new THREE.Euler(
-                  curveData.transform.rotation.x,
-                  curveData.transform.rotation.y,
-                  curveData.transform.rotation.z
-                ),
-                scale: new THREE.Vector2(
-                  curveData.transform.scale.x,
-                  curveData.transform.scale.y
-                )
-              }
-            };
-            useCurveStore.getState().curves.set(curve.id, curve);
-          });
-        }
-
-        // Restore shape keys
-        if (scene.shapeKeys) {
-          const morphState = useMorphTargetStore.getState();
-          const newShapeKeysMap = new Map();
-
-          scene.shapeKeys.forEach(([objectId, shapeKeys]: [string, any[]]) => {
-            newShapeKeysMap.set(objectId, shapeKeys);
-          });
-
-          morphState.shapeKeysByObject = newShapeKeysMap;
-        }
-
-        // Restore base poses
-        if (scene.basePoses) {
-          const morphState = useMorphTargetStore.getState();
-          const newBasePoses = new Map();
-
-          scene.basePoses.forEach(({ objectId, geometryData }: any) => {
-            // Deserialize geometry
-            const geometry = new THREE.BufferGeometry();
-
-            if (geometryData.attributes.position) {
-              geometry.setAttribute(
-                'position',
-                new THREE.BufferAttribute(
-                  new Float32Array(geometryData.attributes.position.array),
-                  geometryData.attributes.position.itemSize
-                )
-              );
-            }
-
-            newBasePoses.set(objectId, geometry);
-          });
-
-          morphState.basePoses = newBasePoses;
-        }
-
-        console.log('[Editor] Scene data restored from storage');
-      }
-    } catch (error) {
-      console.error('Failed to load project:', error);
-      alert('Failed to load project');
-      navigate('/');
-    } finally {
       setLoading(false);
-    }
-  }
+    },
+    onLoadError: (error) => {
+      alert('Failed to load project');
+      setLoading(false);
+    },
+  });
 
-  // Helper to serialize scene data from all stores
-  const serializeSceneData = () => {
-    const objectsState = useObjectsStore.getState();
-    const materialsState = useMaterialsStore.getState();
-    const animationState = useAnimationStore.getState();
-    const envState = useEnvironmentStore.getState();
-    const morphState = useMorphTargetStore.getState();
-    const curveState = useCurveStore.getState();
-
-    // Serialize objects with current geometry from mesh registry
-    const objects = Array.from(objectsState.objects.values()).map(obj => {
-      const mesh = meshRegistry.getMesh(obj.id);
-
-      // If mesh exists in registry with modified geometry, serialize it
-      if (mesh && mesh.geometry) {
-        const geometry = mesh.geometry;
-        const geometryData = {
-          attributes: {} as any,
-          index: null as any,
-        };
-
-        // Serialize position attribute
-        if (geometry.attributes.position) {
-          const pos = geometry.attributes.position;
-          geometryData.attributes.position = {
-            array: Array.from(pos.array),
-            itemSize: pos.itemSize,
-          };
-        }
-
-        // Serialize normal attribute
-        if (geometry.attributes.normal) {
-          const norm = geometry.attributes.normal;
-          geometryData.attributes.normal = {
-            array: Array.from(norm.array),
-            itemSize: norm.itemSize,
-          };
-        }
-
-        // Serialize UV attribute
-        if (geometry.attributes.uv) {
-          const uv = geometry.attributes.uv;
-          geometryData.attributes.uv = {
-            array: Array.from(uv.array),
-            itemSize: uv.itemSize,
-          };
-        }
-
-        // Serialize index
-        if (geometry.index) {
-          geometryData.index = {
-            array: Array.from(geometry.index.array),
-          };
-        }
-
-        // Log that we're saving modified geometry
-        console.log(`[Editor] Saving modified geometry for ${obj.name}, vertices: ${geometryData.attributes.position?.array.length / 3}`);
-
-        // Return object with updated geometry data
-        return {
-          ...obj,
-          importedGeometry: {
-            ...obj.importedGeometry,
-            data: geometryData,
-          }
-        };
-      }
-
-      // Return object as-is if no mesh in registry
-      return obj;
-    });
-
-    // Serialize shape keys
-    const shapeKeysByObject = Array.from(morphState.shapeKeysByObject.entries());
-
-    // Serialize base poses
-    const basePoses: any[] = [];
-    morphState.basePoses.forEach((geom, objectId) => {
-      const geometryData = {
-        attributes: {} as any,
-        index: null as any,
-      };
-
-      if (geom.attributes.position) {
-        const pos = geom.attributes.position;
-        geometryData.attributes.position = {
-          array: Array.from(pos.array),
-          itemSize: pos.itemSize,
-        };
-      }
-
-      basePoses.push({ objectId, geometryData });
-    });
-
-    console.log(`[Editor] Serializing ${objects.length} objects, ${shapeKeysByObject.length} shape key sets`);
-
-    return {
-      objects,
-      shapeKeys: shapeKeysByObject,
-      basePoses,
-      materials: Array.from(materialsState.materials.values()),
-      objectMaterials: Array.from(materialsState.objectMaterials.entries()),
-      textures: Array.from(materialsState.textures.values()),
-      animations: Array.from(animationState.animations.values()),
-      activeAnimationId: animationState.activeAnimationId,
-      environment: {
-        backgroundColor: envState.backgroundColor,
-        hdriEnabled: envState.hdriEnabled,
-        hdriPreset: envState.hdriPreset,
-        hdriIntensity: envState.hdriIntensity,
-        hdriAsBackground: envState.hdriAsBackground,
-        backgroundBlur: envState.backgroundBlur,
-        fogEnabled: envState.fogEnabled,
-        fogType: envState.fogType,
-        fogColor: envState.fogColor,
-        fogNear: envState.fogNear,
-        fogFar: envState.fogFar,
-        fogDensity: envState.fogDensity,
-        groundPlaneEnabled: envState.groundPlaneEnabled,
-        groundPlaneSize: envState.groundPlaneSize,
-        groundPlaneColor: envState.groundPlaneColor,
-        groundPlaneReceiveShadow: envState.groundPlaneReceiveShadow,
-      },
-      curves: Array.from(curveState.curves.values()).map(curve => ({
-        ...curve,
-        // Convert Vector2/Vector3/Euler to serializable format
-        points: curve.points.map(p => ({ x: p.x, y: p.y })),
-        transform: {
-          position: { x: curve.transform.position.x, y: curve.transform.position.y, z: curve.transform.position.z },
-          rotation: { x: curve.transform.rotation.x, y: curve.transform.rotation.y, z: curve.transform.rotation.z },
-          scale: { x: curve.transform.scale.x, y: curve.transform.scale.y }
-        }
-      })),
-    };
-  };
+  // Auto-save using custom hook
+  useAutoSave({
+    project,
+    interval: 30000, // 30 seconds
+    onSaveSuccess: (updatedProject) => {
+      setProject(updatedProject);
+    },
+    onSaveError: (error) => {
+      showError('Auto-save failed. Please save manually.');
+    },
+  });
 
   async function saveProject() {
     if (!project) return;
 
     try {
-      const sceneData = serializeSceneData();
+      const sceneData = serializeScene();
 
       const updatedProject = {
         ...project,

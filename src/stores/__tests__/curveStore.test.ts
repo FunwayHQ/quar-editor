@@ -105,18 +105,26 @@ describe('curveStore', () => {
       expect(updated?.name).toBe('Updated Name');
     });
 
-    it('should update modifiedAt timestamp', async () => {
+    it('should update modifiedAt timestamp', () => {
+      // Use fake timers to control time
+      const now = Date.now();
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+
       const curve = createMockCurve();
       const originalTime = curve.modifiedAt;
       useCurveStore.getState().addCurve(curve);
 
-      // Wait a bit
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Advance time by 100ms
+      vi.advanceTimersByTime(100);
 
       useCurveStore.getState().updateCurve('curve1', { name: 'Updated' });
 
       const updated = useCurveStore.getState().curves.get('curve1');
       expect(updated?.modifiedAt).toBeGreaterThan(originalTime);
+
+      // Restore real timers
+      vi.useRealTimers();
     });
 
     it('should handle updating non-existent curve', () => {

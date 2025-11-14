@@ -86,6 +86,10 @@ export interface MaterialsState {
   // Material assignment (link with objects)
   assignMaterialToObject: (objectId: string, materialId: string) => void;
   objectMaterials: Map<string, string>;  // objectId -> materialId
+
+  // Serialization
+  serialize: () => any;
+  deserialize: (data: any) => void;
 }
 
 // Default material presets
@@ -367,6 +371,53 @@ export const useMaterialsStore = create<MaterialsState>((set, get) => ({
     newObjectMaterials.set(objectId, materialId);
     return { objectMaterials: newObjectMaterials };
   }),
+
+  // Serialization
+  serialize: () => {
+    const state = get();
+    return {
+      materials: Array.from(state.materials.values()),
+      objectMaterials: Array.from(state.objectMaterials.entries()),
+      textures: Array.from(state.textures.values()),
+    };
+  },
+
+  deserialize: (data: any) => {
+    if (!data) {
+      console.warn('[materialsStore] Invalid data for deserialization');
+      return;
+    }
+
+    set(() => {
+      const newMaterials = new Map<string, Material>();
+      const newObjectMaterials = new Map<string, string>();
+      const newTextures = new Map<string, Texture>();
+
+      if (data.materials) {
+        data.materials.forEach((mat: Material) => {
+          newMaterials.set(mat.id, mat);
+        });
+      }
+
+      if (data.objectMaterials) {
+        data.objectMaterials.forEach(([objId, matId]: [string, string]) => {
+          newObjectMaterials.set(objId, matId);
+        });
+      }
+
+      if (data.textures) {
+        data.textures.forEach((tex: Texture) => {
+          newTextures.set(tex.id, tex);
+        });
+      }
+
+      return {
+        materials: newMaterials,
+        objectMaterials: newObjectMaterials,
+        textures: newTextures,
+      };
+    });
+  },
 }));
 
 // Helper to generate texture ID

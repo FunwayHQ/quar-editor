@@ -51,9 +51,13 @@ export interface EnvironmentState {
   setGroundPlaneSize: (size: number) => void;
   setGroundPlaneColor: (color: string) => void;
   setGroundPlaneReceiveShadow: (receiveShadow: boolean) => void;
+
+  // Serialization
+  serialize: () => any;
+  deserialize: (data: any) => void;
 }
 
-export const useEnvironmentStore = create<EnvironmentState>((set) => ({
+export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   // Initial values
   backgroundColor: '#0A0A0B',
 
@@ -94,4 +98,36 @@ export const useEnvironmentStore = create<EnvironmentState>((set) => ({
   setGroundPlaneSize: (size) => set({ groundPlaneSize: size }),
   setGroundPlaneColor: (color) => set({ groundPlaneColor: color }),
   setGroundPlaneReceiveShadow: (receiveShadow) => set({ groundPlaneReceiveShadow: receiveShadow }),
+
+  // Serialization
+  serialize: () => {
+    const state = get();
+    return {
+      backgroundColor: state.backgroundColor,
+      hdriEnabled: state.hdriEnabled,
+      hdriPreset: state.hdriPreset,
+      hdriIntensity: state.hdriIntensity,
+      hdriAsBackground: state.hdriAsBackground,
+      backgroundBlur: state.backgroundBlur,
+      fogEnabled: state.fogEnabled,
+      fogType: state.fogType,
+      fogColor: state.fogColor,
+      fogNear: state.fogNear,
+      fogFar: state.fogFar,
+      fogDensity: state.fogDensity,
+      groundPlaneEnabled: state.groundPlaneEnabled,
+      groundPlaneSize: state.groundPlaneSize,
+      groundPlaneColor: state.groundPlaneColor,
+      groundPlaneReceiveShadow: state.groundPlaneReceiveShadow,
+    };
+  },
+
+  deserialize: (data: any) => {
+    if (!data) {
+      console.warn('[environmentStore] Invalid data for deserialization');
+      return;
+    }
+
+    set(() => data);
+  },
 }));

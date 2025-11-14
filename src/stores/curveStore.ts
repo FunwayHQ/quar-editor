@@ -42,6 +42,10 @@ interface CurveStore {
   // Utilities
   generateName: (type: string) => string;
   clear: () => void;
+
+  // Serialization
+  serialize: () => any;
+  deserialize: (data: any) => void;
 }
 
 export const useCurveStore = create<CurveStore>((set, get) => ({
@@ -158,6 +162,72 @@ export const useCurveStore = create<CurveStore>((set, get) => ({
     set({
       curves: new Map(),
       selectedCurveIds: []
+    });
+  },
+
+  // Serialization
+  serialize: () => {
+    const state = get();
+    return Array.from(state.curves.values()).map(curve => ({
+      ...curve,
+      // Convert Vector2/Vector3/Euler to serializable format
+      points: curve.points.map(p => ({ x: p.x, y: p.y })),
+      transform: {
+        position: {
+          x: curve.transform.position.x,
+          y: curve.transform.position.y,
+          z: curve.transform.position.z
+        },
+        rotation: {
+          x: curve.transform.rotation.x,
+          y: curve.transform.rotation.y,
+          z: curve.transform.rotation.z
+        },
+        scale: {
+          x: curve.transform.scale.x,
+          y: curve.transform.scale.y
+        }
+      }
+    }));
+  },
+
+  deserialize: (data: any) => {
+    if (!data || !Array.isArray(data)) {
+      console.warn('[curveStore] Invalid data for deserialization');
+      return;
+    }
+
+    console.log(`[curveStore] Loading ${data.length} curves from saved data`);
+
+    set((state) => {
+      const newCurves = new Map<string, Curve>();
+
+      data.forEach((curveData: any) => {
+        const curve: Curve = {
+          ...curveData,
+          // Convert back to Vector2/Vector3/Euler
+          points: curveData.points.map((p: any) => new THREE.Vector2(p.x, p.y)),
+          transform: {
+            position: new THREE.Vector3(
+              curveData.transform.position.x,
+              curveData.transform.position.y,
+              curveData.transform.position.z
+            ),
+            rotation: new THREE.Euler(
+              curveData.transform.rotation.x,
+              curveData.transform.rotation.y,
+              curveData.transform.rotation.z
+            ),
+            scale: new THREE.Vector2(
+              curveData.transform.scale.x,
+              curveData.transform.scale.y
+            )
+          }
+        };
+        newCurves.set(curve.id, curve);
+      });
+
+      return { curves: newCurves };
     });
   }
 }));

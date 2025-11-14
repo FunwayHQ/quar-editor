@@ -118,6 +118,10 @@ export interface AnimationState {
   setSnapToKeyframes: (enabled: boolean) => void;
   setTimelineZoom: (zoom: number) => void;
   setTimelineScroll: (scroll: number) => void;
+
+  // Serialization
+  serialize: () => any;
+  deserialize: (data: any) => void;
 }
 
 // Helper to generate unique IDs
@@ -365,4 +369,39 @@ export const useAnimationStore = create<AnimationState>((set, get) => ({
   setSnapToKeyframes: (enabled) => set({ snapToKeyframes: enabled }),
   setTimelineZoom: (zoom) => set({ timelineZoom: Math.max(20, Math.min(zoom, 500)) }),
   setTimelineScroll: (scroll) => set({ timelineScroll: Math.max(0, scroll) }),
+
+  // Serialization
+  serialize: () => {
+    const state = get();
+    return {
+      animations: Array.from(state.animations.values()),
+      activeAnimationId: state.activeAnimationId,
+    };
+  },
+
+  deserialize: (data: any) => {
+    if (!data) {
+      console.warn('[animationStore] Invalid data for deserialization');
+      return;
+    }
+
+    set(() => {
+      const newAnimations = new Map<string, Animation>();
+
+      if (data.animations) {
+        data.animations.forEach((anim: Animation) => {
+          newAnimations.set(anim.id, anim);
+        });
+      }
+
+      return {
+        animations: newAnimations,
+        activeAnimationId: data.activeAnimationId || null,
+      };
+    });
+
+    if (data.activeAnimationId) {
+      get().setActiveAnimation(data.activeAnimationId);
+    }
+  },
 }));
