@@ -168,7 +168,7 @@ describe('AnimationSettingsDialog', () => {
     }
   });
 
-  it('saves changes on Save button', async () => {
+  it('saves changes on Save button', () => {
     render(
       <AnimationSettingsDialog
         isOpen={true}
@@ -185,10 +185,8 @@ describe('AnimationSettingsDialog', () => {
     const saveButton = screen.getByText('Save Changes');
     fireEvent.click(saveButton);
 
-    await waitFor(() => {
-      // Should close after saving
-      expect(mockOnClose).toHaveBeenCalled();
-    });
+    // Should close after saving (synchronous operation)
+    expect(mockOnClose).toHaveBeenCalled();
   });
 
   it('handles Enter key to save', () => {
