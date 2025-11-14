@@ -462,4 +462,81 @@ describe('objectsStore', () => {
       expect(allObjects).toHaveLength(0);
     });
   });
+
+  describe('Serialization', () => {
+    it('should serialize objects correctly', () => {
+      const obj1 = useObjectsStore.getState().createPrimitive('box', [1, 2, 3]);
+      const obj2 = useObjectsStore.getState().createPrimitive('sphere', [4, 5, 6]);
+
+      const serialized = useObjectsStore.getState().serialize();
+
+      expect(serialized).toHaveLength(2);
+      expect(serialized[0].type).toBe('box');
+      expect(serialized[0].position).toEqual([1, 2, 3]);
+      expect(serialized[1].type).toBe('sphere');
+      expect(serialized[1].position).toEqual([4, 5, 6]);
+    });
+
+    it('should deserialize objects correctly', () => {
+      const data = [
+        {
+          id: 'obj_1',
+          name: 'TestBox',
+          type: 'box',
+          visible: true,
+          locked: false,
+          position: [10, 20, 30],
+          rotation: [0, 0, 0],
+          scale: [2, 2, 2],
+          parentId: null,
+          children: [],
+          geometryParams: { width: 1, height: 1, depth: 1 },
+          createdAt: Date.now(),
+          modifiedAt: Date.now(),
+        },
+      ];
+
+      useObjectsStore.getState().deserialize(data);
+
+      const objects = useObjectsStore.getState().objects;
+      expect(objects.size).toBe(1);
+      expect(objects.get('obj_1')?.name).toBe('TestBox');
+      expect(objects.get('obj_1')?.position).toEqual([10, 20, 30]);
+      expect(objects.get('obj_1')?.scale).toEqual([2, 2, 2]);
+    });
+
+    it('should handle empty array deserialization', () => {
+      useObjectsStore.getState().deserialize([]);
+
+      const objects = useObjectsStore.getState().objects;
+      expect(objects.size).toBe(0);
+    });
+
+    it('should handle invalid data gracefully', () => {
+      expect(() => useObjectsStore.getState().deserialize(null)).not.toThrow();
+      expect(() => useObjectsStore.getState().deserialize(undefined)).not.toThrow();
+    });
+
+    it('should perform round-trip serialization correctly', () => {
+      const obj1 = useObjectsStore.getState().createPrimitive('box', [1, 2, 3]);
+      const obj2 = useObjectsStore.getState().createPrimitive('sphere', [4, 5, 6]);
+
+      // Serialize
+      const serialized = useObjectsStore.getState().serialize();
+
+      // Clear store
+      useObjectsStore.setState({ objects: new Map() });
+
+      // Deserialize
+      useObjectsStore.getState().deserialize(serialized);
+
+      // Verify
+      const objects = useObjectsStore.getState().objects;
+      expect(objects.size).toBe(2);
+      expect(objects.get(obj1.id)?.type).toBe('box');
+      expect(objects.get(obj1.id)?.position).toEqual([1, 2, 3]);
+      expect(objects.get(obj2.id)?.type).toBe('sphere');
+      expect(objects.get(obj2.id)?.position).toEqual([4, 5, 6]);
+    });
+  });
 });

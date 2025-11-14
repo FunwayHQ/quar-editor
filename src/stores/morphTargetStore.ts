@@ -46,6 +46,12 @@ export interface MorphTargetState {
 
   getShapeKeysForObject: (objectId: string) => ShapeKey[];
   clearShapeKeysForObject: (objectId: string) => void;
+
+  // Serialization
+  serializeShapeKeys: () => any;
+  deserializeShapeKeys: (data: any) => void;
+  serializeBasePoses: () => any;
+  deserializeBasePoses: (data: any) => void;
 }
 
 export const useMorphTargetStore = create<MorphTargetState>((set, get) => ({
@@ -230,5 +236,77 @@ export const useMorphTargetStore = create<MorphTargetState>((set, get) => ({
         basePoses: newBasePoses,
       };
     });
+  },
+
+  // Serialization
+  serializeShapeKeys: () => {
+    const state = get();
+    return Array.from(state.shapeKeysByObject.entries());
+  },
+
+  deserializeShapeKeys: (data: any) => {
+    if (!data || !Array.isArray(data)) {
+      console.warn('[morphTargetStore] Invalid shape keys data for deserialization');
+      return;
+    }
+
+    const newShapeKeysMap = new Map();
+    data.forEach(([objectId, shapeKeys]: [string, any[]]) => {
+      newShapeKeysMap.set(objectId, shapeKeys);
+    });
+
+    set({ shapeKeysByObject: newShapeKeysMap });
+  },
+
+  serializeBasePoses: () => {
+    const state = get();
+    const basePoses: any[] = [];
+
+    state.basePoses.forEach((geom, objectId) => {
+      const geometryData = {
+        attributes: {} as any,
+        index: null as any,
+      };
+
+      if (geom.attributes.position) {
+        const pos = geom.attributes.position;
+        geometryData.attributes.position = {
+          array: Array.from(pos.array),
+          itemSize: pos.itemSize,
+        };
+      }
+
+      basePoses.push({ objectId, geometryData });
+    });
+
+    return basePoses;
+  },
+
+  deserializeBasePoses: (data: any) => {
+    if (!data || !Array.isArray(data)) {
+      console.warn('[morphTargetStore] Invalid base poses data for deserialization');
+      return;
+    }
+
+    const newBasePoses = new Map();
+
+    data.forEach(({ objectId, geometryData }: any) => {
+      // Deserialize geometry
+      const geometry = new THREE.BufferGeometry();
+
+      if (geometryData.attributes.position) {
+        geometry.setAttribute(
+          'position',
+          new THREE.BufferAttribute(
+            new Float32Array(geometryData.attributes.position.array),
+            geometryData.attributes.position.itemSize
+          )
+        );
+      }
+
+      newBasePoses.set(objectId, geometry);
+    });
+
+    set({ basePoses: newBasePoses });
   },
 }));

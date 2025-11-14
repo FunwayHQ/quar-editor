@@ -164,6 +164,10 @@ export interface ObjectsState {
   // Bulk operations
   duplicateObjects: (ids: string[]) => void;
   deleteObjects: (ids: string[]) => void;
+
+  // Serialization
+  serialize: () => any[];
+  deserialize: (data: any) => void;
 }
 
 // Counter for auto-naming
@@ -684,5 +688,101 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
 
     state.addObject(group);
     return group;
+  },
+
+  // Serialization
+  serialize: () => {
+    const state = get();
+    // Import meshRegistry dynamically to avoid circular dependencies
+    const { meshRegistry } = require('../lib/mesh/MeshRegistry');
+
+    // Serialize objects with current geometry from mesh registry
+    const objects = Array.from(state.objects.values()).map(obj => {
+      const mesh = meshRegistry.getMesh(obj.id);
+
+      // If mesh exists in registry with modified geometry, serialize it
+      if (mesh && mesh.geometry) {
+        const geometry = mesh.geometry;
+        const geometryData = {
+          attributes: {} as any,
+          index: null as any,
+        };
+
+        // Serialize position attribute
+        if (geometry.attributes.position) {
+          const pos = geometry.attributes.position;
+          geometryData.attributes.position = {
+            array: Array.from(pos.array),
+            itemSize: pos.itemSize,
+          };
+        }
+
+        // Serialize normal attribute
+        if (geometry.attributes.normal) {
+          const norm = geometry.attributes.normal;
+          geometryData.attributes.normal = {
+            array: Array.from(norm.array),
+            itemSize: norm.itemSize,
+          };
+        }
+
+        // Serialize UV attribute
+        if (geometry.attributes.uv) {
+          const uv = geometry.attributes.uv;
+          geometryData.attributes.uv = {
+            array: Array.from(uv.array),
+            itemSize: uv.itemSize,
+          };
+        }
+
+        // Serialize index
+        if (geometry.index) {
+          geometryData.index = {
+            array: Array.from(geometry.index.array),
+          };
+        }
+
+        // Log that we're saving modified geometry
+        console.log(`[objectsStore] Saving modified geometry for ${obj.name}, vertices: ${geometryData.attributes.position?.array.length / 3}`);
+
+        // Return object with updated geometry data
+        return {
+          ...obj,
+          importedGeometry: {
+            ...obj.importedGeometry,
+            data: geometryData,
+          }
+        };
+      }
+
+      // Return object as-is if no mesh in registry
+      return obj;
+    });
+
+    console.log(`[objectsStore] Serializing ${objects.length} objects`);
+    return objects;
+  },
+
+  deserialize: (data: any) => {
+    if (!data || !Array.isArray(data)) {
+      console.warn('[objectsStore] Invalid data for deserialization');
+      return;
+    }
+
+    console.log(`[objectsStore] Loading ${data.length} objects from saved data`);
+
+    set((state) => {
+      const newObjects = new Map<string, SceneObject>();
+
+      data.forEach((obj: any) => {
+        // Log if object has saved geometry data
+        if (obj.geometry?.data) {
+          console.log(`[objectsStore] Object ${obj.name} has saved geometry data (${obj.geometry.data.attributes?.position?.array.length / 3} vertices)`);
+        }
+        newObjects.set(obj.id, obj);
+      });
+
+      return { objects: newObjects };
+    });
   },
 }));
