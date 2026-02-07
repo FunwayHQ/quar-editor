@@ -98,7 +98,13 @@ export function KnifeFaceHighlight({
   if (!faceGeometry) return null;
 
   return (
-    <lineSegments geometry={faceGeometry} position={position} rotation={rotation} scale={scale}>
+    <lineSegments
+      geometry={faceGeometry}
+      position={position}
+      rotation={rotation}
+      scale={scale}
+      raycast={() => {}}
+    >
       <lineBasicMaterial color="#10B981" linewidth={2} depthTest={false} />
     </lineSegments>
   );

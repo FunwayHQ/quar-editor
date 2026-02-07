@@ -76,7 +76,7 @@ function KnifeWireframe({ geometry }: { geometry: THREE.BufferGeometry }) {
   }, [edgesGeo, edgeMaterial]);
 
   return (
-    <lineSegments geometry={edgesGeo} material={edgeMaterial} />
+    <lineSegments geometry={edgesGeo} material={edgeMaterial} raycast={() => {}} />
   );
 }
 
@@ -521,7 +521,11 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
 
     // Priority 1: Knife tool (if active in edit mode)
     if (isKnifeActive && isEditMode && editingObjectId === object.id && meshRef.current) {
-      const intersection = (event as any).intersections?.[0];
+      // Filter intersections to only use hits on Mesh objects (not lineSegments/helpers)
+      const allIntersections = (event as any).intersections || [];
+      const intersection = allIntersections.find(
+        (i: any) => i.object?.isMesh
+      );
       if (intersection) {
         // Try to find nearby edge to snap to
         // Sprint Y: Edge-only knife tool (must click near edge)
