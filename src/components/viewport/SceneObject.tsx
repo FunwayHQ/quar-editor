@@ -24,7 +24,6 @@ import {
   findNearbyEdge,
   closestPointOnLine,
 } from '../../lib/geometry/IntersectionUtils';
-import { findQuadPair } from '../../lib/geometry/QuadDetection';
 import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
 
 // Sprint Y: Memoized knife wireframe to prevent memory leak
@@ -560,51 +559,46 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
           return; // Reject this click
         }
 
-        // Sprint Y: Validate face based on cut mode
+        // Validate: second point must be on the same QMesh face
         if (targetFaceIndex !== null && intersection.faceIndex !== targetFaceIndex) {
-          // Check if in quad mode - allow clicking on quad pair
-          if (cutMode === 'quad') {
-            const quadPair = findQuadPair(targetFaceIndex, meshRef.current.geometry);
-            if (quadPair !== null && intersection.faceIndex === quadPair) {
-              console.log('[KnifeTool] Quad mode: Second point on quad pair - OK');
-              // Update target face to the clicked one for consistency
-              // (both will be cut anyway)
+          const sceneObj = useObjectsStore.getState().getObject(editingObjectId);
+          if (sceneObj?.qMesh) {
+            const targetQFace = sceneObj.qMesh.getFaceIdFromTriangleIndex(targetFaceIndex);
+            const clickedQFace = sceneObj.qMesh.getFaceIdFromTriangleIndex(intersection.faceIndex);
+            if (targetQFace && clickedQFace && targetQFace === clickedQFace) {
+              console.log('[KnifeTool] Same QMesh face', targetQFace, '- OK');
             } else {
-              console.warn('[KnifeTool] Second point must be on the same quad! Click on face', targetFaceIndex, 'or its pair', quadPair);
+              console.warn('[KnifeTool] Second point must be on the same face!', targetQFace, '!=', clickedQFace);
               return;
             }
           } else {
-            // Triangle mode - must be exact same triangle
-            console.warn('[KnifeTool] Second point must be on the same triangle! Click on face', targetFaceIndex);
+            console.warn('[KnifeTool] Second point must be on the same face!');
             return;
           }
+        }
+
+        // Only accept 2 points max
+        if (drawingPath.length >= 2) {
+          console.warn('[KnifeTool] Already have 2 points - click Confirm or press Enter');
+          return;
         }
 
         // Add point to cutting path (pass face index for first point)
         addPathPoint(snapPoint, intersection.faceIndex);
 
-        // If we have 2 points, find intersections
+        // After second point, calculate intersections and auto-confirm
         if (drawingPath.length === 1) {
-          // We just added the second point, calculate intersections
           const currentPath = [...drawingPath, snapPoint];
+          const intersections = findLineIntersections(
+            currentPath[0],
+            currentPath[1],
+            meshRef.current.geometry,
+            meshRef.current
+          );
 
-          if (currentPath.length === 2) {
-            const intersections = findLineIntersections(
-              currentPath[0],
-              currentPath[1],
-              meshRef.current.geometry,
-              meshRef.current
-            );
+          console.log('[KnifeTool] Total intersections:', intersections.length);
+          setIntersectionPoints(intersections);
 
-            // Filter to only intersections on the same face as the first point
-            // For now, log all intersections and let algorithm handle it
-            console.log('[KnifeTool] Total intersections:', intersections.length);
-            intersections.forEach(int => {
-              console.log('  - Face', int.faceIndex, 'at', int.point.toArray());
-            });
-
-            setIntersectionPoints(intersections);
-          }
         }
       }
       return;

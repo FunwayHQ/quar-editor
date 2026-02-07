@@ -5,7 +5,7 @@
  * Mini-Sprint: Knife Tool Implementation
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Scissors, Check, X } from 'lucide-react';
 import { useKnifeToolStore } from '../../stores/knifeToolStore';
 import { useEditModeStore } from '../../stores/editModeStore';
@@ -112,6 +112,22 @@ export function KnifeToolPanel() {
   };
 
   const canConfirm = drawingPath.length >= 2 && intersectionPoints.length >= 1;
+
+  // Auto-confirm when 2 points are placed
+  const autoConfirmedRef = useRef(false);
+  useEffect(() => {
+    if (canConfirm && !autoConfirmedRef.current) {
+      autoConfirmedRef.current = true;
+      // Small delay so the UI briefly shows the 2-point state
+      const timer = setTimeout(() => {
+        handleConfirm();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    if (!canConfirm) {
+      autoConfirmedRef.current = false;
+    }
+  }, [canConfirm]);
 
   console.log('[KnifeToolPanel] Render - canConfirm:', canConfirm, 'points:', drawingPath.length, 'intersections:', intersectionPoints.length);
 
