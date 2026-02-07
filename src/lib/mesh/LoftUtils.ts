@@ -114,11 +114,10 @@ export function loftCurves(
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
-  // Step 4: Add end caps if requested (disabled for now - has bugs)
-  // TODO: Fix cap geometry merging
-  // if (options.cap && curves[0].closed) {
-  //   addLoftCaps(geometry, alignedCurves, spacing);
-  // }
+  // Step 4: Add end caps if requested
+  if (options.cap && curves[0].closed) {
+    addLoftCaps(geometry, alignedCurves, spacing, options.axis || 'y');
+  }
 
   // Create mesh with material
   const material = new THREE.MeshStandardMaterial({
@@ -139,7 +138,8 @@ export function loftCurves(
 function addLoftCaps(
   geometry: THREE.BufferGeometry,
   curves: THREE.Vector2[][],
-  spacing: number
+  spacing: number,
+  axis: 'x' | 'y' | 'z'
 ): void {
   if (curves.length < 2) return;
 
@@ -147,12 +147,12 @@ function addLoftCaps(
   const lastCurve = curves[curves.length - 1];
 
   // Triangulate first curve (bottom cap)
-  const bottomY = -1.0;
-  const bottomCap = triangulateCurve(firstCurve, bottomY);
+  const bottomAxisValue = -1.0;
+  const bottomCap = triangulateCurve(firstCurve, bottomAxisValue, axis, false);
 
   // Triangulate last curve (top cap)
-  const topY = -1.0 + (curves.length - 1) * spacing;
-  const topCap = triangulateCurve(lastCurve, topY, true); // Reverse winding for top
+  const topAxisValue = -1.0 + (curves.length - 1) * spacing;
+  const topCap = triangulateCurve(lastCurve, topAxisValue, axis, true); // Reverse winding for top
 
   // Merge cap geometries with main geometry
   const positions = geometry.attributes.position.array;
@@ -181,7 +181,8 @@ function addLoftCaps(
  */
 function triangulateCurve(
   points: THREE.Vector2[],
-  y: number,
+  axisValue: number,
+  axis: 'x' | 'y' | 'z',
   reverseWinding: boolean = false
 ): { vertices: number[]; indices: number[] } {
   // Flatten points to earcut format [x, z, x, z, ...]
@@ -202,10 +203,19 @@ function triangulateCurve(
     triangles = reversed;
   }
 
-  // Convert to 3D vertices
+  // Convert to 3D vertices based on axis
   const vertices: number[] = [];
   points.forEach(p => {
-    vertices.push(p.x, y, p.y);
+    if (axis === 'y') {
+      // Lofting along Y axis
+      vertices.push(p.x, axisValue, p.y);
+    } else if (axis === 'x') {
+      // Lofting along X axis
+      vertices.push(axisValue, p.y, p.x);
+    } else { // 'z'
+      // Lofting along Z axis
+      vertices.push(p.x, p.y, axisValue);
+    }
   });
 
   return { vertices, indices: triangles };

@@ -6,17 +6,27 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Folder, Download } from 'lucide-react';
+import { Plus, Folder, Download, Shield, Database, Trash2, FileDown } from 'lucide-react';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
 import { useAppStore } from '../stores/appStore';
+import { useConsentStore } from '../stores/consentStore';
+import { useToastStore } from '../stores/toastStore';
 import { v4 as uuidv4 } from 'uuid';
+import { PrivacyPolicy } from './PrivacyPolicy';
+import { ConfirmDialog, useConfirmDialog } from './ConfirmDialog';
+import { clearAllData } from '../lib/storage/db';
 
 export function WelcomeScreen() {
   const navigate = useNavigate();
   // Use selector to subscribe only to needed state
   const isOffline = useAppStore((state) => state.isOffline);
+  const { revokeConsent } = useConsentStore();
+  const toast = useToastStore();
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+  const [showDataManagement, setShowDataManagement] = useState(false);
+  const { dialogProps, showConfirm } = useConfirmDialog();
 
   const storage = getStorageAdapter();
 
@@ -88,6 +98,81 @@ export function WelcomeScreen() {
       console.error('Failed to import project:', error);
       alert('Failed to import .quar file');
     }
+  }
+
+  async function exportAllData() {
+    try {
+      const allProjects = await storage.getProjects();
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        projects: allProjects,
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quar-editor-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Data exported successfully');
+    } catch {
+      toast.error('Failed to export data');
+    }
+  }
+
+  function handleClearProjects() {
+    showConfirm({
+      title: 'Clear All Projects',
+      message:
+        'This will permanently delete all projects and assets from your browser. This cannot be undone.',
+      variant: 'danger',
+      confirmLabel: 'Delete All',
+      onConfirm: async () => {
+        try {
+          await clearAllData();
+          setProjects([]);
+          toast.success('All projects cleared');
+        } catch {
+          toast.error('Failed to clear projects');
+        }
+      },
+    });
+  }
+
+  function handleClearPreferences() {
+    showConfirm({
+      title: 'Clear Preferences',
+      message:
+        'This will reset your theme, layout, and all other preferences to defaults.',
+      variant: 'warning',
+      confirmLabel: 'Reset',
+      onConfirm: () => {
+        try {
+          localStorage.removeItem('quar-app-storage');
+          toast.success('Preferences cleared — reload to apply defaults');
+        } catch {
+          toast.error('Failed to clear preferences');
+        }
+      },
+    });
+  }
+
+  function handleRevokeConsent() {
+    showConfirm({
+      title: 'Revoke Consent',
+      message:
+        'This will revoke your storage consent. The consent banner will appear again on your next visit.',
+      variant: 'warning',
+      icon: Shield,
+      confirmLabel: 'Revoke',
+      onConfirm: () => {
+        revokeConsent();
+        toast.info('Consent revoked');
+      },
+    });
   }
 
   return (
@@ -187,6 +272,48 @@ export function WelcomeScreen() {
             </div>
           )}
         </div>
+
+        {/* Data Management */}
+        {showDataManagement && (
+          <div className="mt-8 glass p-6 rounded-lg">
+            <div className="flex items-center gap-3 mb-4">
+              <Database className="w-5 h-5 text-purple-400" />
+              <h3 className="text-lg font-semibold">Manage Your Data</h3>
+            </div>
+            <p className="text-sm text-text-secondary mb-4">
+              All your data is stored locally in your browser. Use these controls to export or delete it.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={exportAllData}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-[#27272A] hover:bg-[#3f3f46] rounded-lg transition-colors"
+              >
+                <FileDown className="w-4 h-4" />
+                Export All Data
+              </button>
+              <button
+                onClick={handleClearProjects}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear All Projects
+              </button>
+              <button
+                onClick={handleClearPreferences}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded-lg transition-colors"
+              >
+                Clear Preferences
+              </button>
+              <button
+                onClick={handleRevokeConsent}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg transition-colors"
+              >
+                <Shield className="w-4 h-4" />
+                Revoke Consent
+              </button>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
@@ -201,8 +328,28 @@ export function WelcomeScreen() {
           >
             GitHub
           </a>
+          {' • '}
+          <button
+            onClick={() => setShowPrivacyPolicy(true)}
+            className="text-accent hover:underline"
+          >
+            Privacy Policy
+          </button>
+          {' • '}
+          <button
+            onClick={() => setShowDataManagement((v) => !v)}
+            className="text-accent hover:underline"
+          >
+            Manage Data
+          </button>
         </p>
       </footer>
+
+      {showPrivacyPolicy && (
+        <PrivacyPolicy onClose={() => setShowPrivacyPolicy(false)} />
+      )}
+
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

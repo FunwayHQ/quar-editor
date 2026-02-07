@@ -106,25 +106,17 @@ describe('curveStore', () => {
     });
 
     it('should update modifiedAt timestamp', () => {
-      // Use fake timers to control time
-      const now = Date.now();
-      vi.useFakeTimers();
-      vi.setSystemTime(now);
-
       const curve = createMockCurve();
-      const originalTime = curve.modifiedAt;
+      // Set a past timestamp
+      curve.modifiedAt = Date.now() - 1000;
       useCurveStore.getState().addCurve(curve);
 
-      // Advance time by 100ms
-      vi.advanceTimersByTime(100);
-
+      // Update the curve (this should update modifiedAt to current time)
       useCurveStore.getState().updateCurve('curve1', { name: 'Updated' });
 
       const updated = useCurveStore.getState().curves.get('curve1');
-      expect(updated?.modifiedAt).toBeGreaterThan(originalTime);
-
-      // Restore real timers
-      vi.useRealTimers();
+      // The updated timestamp should be greater than the original
+      expect(updated?.modifiedAt).toBeGreaterThan(curve.modifiedAt);
     });
 
     it('should handle updating non-existent curve', () => {

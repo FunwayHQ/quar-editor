@@ -15,9 +15,9 @@ const mockEditModeStore = {
   isEditMode: true,
   editingObjectId: 'obj-1',
   selectionMode: 'face' as const,
-  selectedVertices: new Set(),
-  selectedEdges: new Set(),
-  selectedFaces: new Set(['f_0', 'f_1']),
+  selectedVertices: new Set<string>(),
+  selectedEdges: new Set<string>(),
+  selectedFaces: new Set<string>(['f_0', 'f_1']),
   hasSelection: vi.fn(() => true),
 };
 
@@ -89,9 +89,9 @@ describe('EditOperationsPanel', () => {
     mockEditModeStore.isEditMode = true;
     mockEditModeStore.editingObjectId = 'obj-1';
     mockEditModeStore.selectionMode = 'face';
-    mockEditModeStore.selectedVertices = new Set();
-    mockEditModeStore.selectedEdges = new Set();
-    mockEditModeStore.selectedFaces = new Set(['f_0', 'f_1']);
+    mockEditModeStore.selectedVertices = new Set<string>();
+    mockEditModeStore.selectedEdges = new Set<string>();
+    mockEditModeStore.selectedFaces = new Set<string>(['f_0', 'f_1']);
     // Fix hasSelection to return true when faces are selected
     mockEditModeStore.hasSelection = vi.fn(() => mockEditModeStore.selectedFaces.size > 0 || mockEditModeStore.selectedVertices.size > 0 || mockEditModeStore.selectedEdges.size > 0);
   });
@@ -154,8 +154,8 @@ describe('EditOperationsPanel', () => {
   });
 
   it('does not render without selection', async () => {
-    mockEditModeStore.selectedFaces = new Set();
-    mockEditModeStore.selectedVertices = new Set();
+    mockEditModeStore.selectedFaces = new Set<string>();
+    mockEditModeStore.selectedVertices = new Set<string>();
     mockEditModeStore.hasSelection = vi.fn(() => false);
 
     await act(async () => {
@@ -178,8 +178,8 @@ describe('EditOperationsPanel', () => {
 
   it('shows transform tools when in vertex mode', async () => {
     mockEditModeStore.selectionMode = 'vertex';
-    mockEditModeStore.selectedVertices = new Set([0]);
-    mockEditModeStore.selectedFaces = new Set();
+    mockEditModeStore.selectedVertices = new Set<string>(['v_0']);
+    mockEditModeStore.selectedFaces = new Set<string>();
 
     await act(async () => {
       render(<EditOperationsPanel />);

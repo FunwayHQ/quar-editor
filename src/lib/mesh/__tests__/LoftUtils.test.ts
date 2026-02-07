@@ -194,9 +194,8 @@ describe('LoftUtils', () => {
       expect(mesh).toBeInstanceOf(THREE.Mesh);
     });
 
-    it.skip('should create end caps when cap=true', () => {
-      // TODO: Re-enable when cap feature is fixed
-      // Currently disabled due to WebGL buffer size issues
+    it('should create end caps when cap=true', () => {
+      // Testing end caps feature
       const curve1 = createMockCurve('curve1', [
         new THREE.Vector2(0, 0),
         new THREE.Vector2(1, 0),

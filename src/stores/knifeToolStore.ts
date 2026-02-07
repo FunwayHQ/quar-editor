@@ -57,13 +57,15 @@ export const useKnifeToolStore = create<KnifeToolState>((set, get) => ({
   setCutMode: (mode) => set({ cutMode: mode }),
 
   // Activate the knife tool
+  // NOTE: We DON'T clear selection - user should select face FIRST, then press K
   activateTool: () => {
-    console.log('[KnifeTool] Tool activated');
+    console.log('[KnifeTool] Tool activated - selection preserved');
     set({
       isActive: true,
       isDrawing: false,
       drawingPath: [],
       intersectionPoints: [],
+      // targetFaceIndex: null, // REMOVED - keep the current target face!
     });
   },
 

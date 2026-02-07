@@ -11,6 +11,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { Editor } from './components/Editor';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
+import { ConsentBanner } from './components/ConsentBanner';
 
 function App() {
   // Use selectors to subscribe only to needed state
@@ -39,6 +40,9 @@ function App() {
           </Routes>
         </ErrorBoundary>
       </BrowserRouter>
+
+      {/* GDPR Consent Banner */}
+      <ConsentBanner />
 
       {/* Global Toast Container - outside ErrorBoundary to prevent toast errors from crashing the app */}
       <ToastContainer />

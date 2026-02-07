@@ -930,11 +930,43 @@ export class MeshOperations {
   /**
    * Knife cut - Split faces along a drawn path
    */
+  /**
+   * Knife cut using QMesh (NEW - replaces old BufferGeometry approach)
+   */
+  static knifeCutQMesh(
+    objectId: string,
+    faceId: string,
+    cutPoint1: THREE.Vector3,
+    cutPoint2: THREE.Vector3
+  ): { newFaceIds: string[] } {
+    const objectsStore = useObjectsStore.getState();
+    const sceneObject = objectsStore.getObject(objectId);
+
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.warn('[MeshOperations] Object or qMesh not found');
+      return { newFaceIds: [] };
+    }
+
+    const qMesh = sceneObject.qMesh;
+    const result = qMesh.splitFace(faceId, cutPoint1, cutPoint2);
+
+    // Update geometry in store
+    objectsStore.updateObjectGeometry(objectId, qMesh);
+
+    console.log(`[MeshOperations] Knife cut on face ${faceId}: created ${result.newFaceIds.length} new faces`);
+    return result;
+  }
+
+  /**
+   * OLD BufferGeometry knife cut (DEPRECATED - use knifeCutQMesh instead)
+   */
   static knifeCut(
     geometry: THREE.BufferGeometry,
     intersectionPoints: Array<{ point: THREE.Vector3; faceIndex: number; edgeIndex?: number }>,
     options: KnifeCutOptions = {}
   ): void {
+    console.warn('[MeshOperations] knifeCut() is deprecated - use knifeCutQMesh() instead');
+
     if (intersectionPoints.length < 1) {
       console.warn('Knife cut requires at least 1 intersection point');
       return;

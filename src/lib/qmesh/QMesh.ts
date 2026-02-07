@@ -217,7 +217,11 @@ export class QMesh {
         positionToVertexId.set(key, vertexId);
       }
 
-      return qMesh.vertices.get(vertexId)!;
+      const vertex = qMesh.vertices.get(vertexId);
+      if (!vertex) {
+        throw new Error(`Vertex ${vertexId} not found in QMesh - this should never happen`);
+      }
+      return vertex;
     };
 
     // Step 2: Build triangles and detect quads
@@ -233,6 +237,13 @@ export class QMesh {
       const i0 = index ? index.getX(i * 3) : i * 3;
       const i1 = index ? index.getX(i * 3 + 1) : i * 3 + 1;
       const i2 = index ? index.getX(i * 3 + 2) : i * 3 + 2;
+
+      // Validate indices
+      if (i0 >= positions.count || i1 >= positions.count || i2 >= positions.count ||
+          i0 < 0 || i1 < 0 || i2 < 0) {
+        console.error(`[QMesh] Invalid indices at triangle ${i}: [${i0}, ${i1}, ${i2}], positions.count=${positions.count}`);
+        continue; // Skip invalid triangle
+      }
 
       const v0 = getOrCreateVertex(
         positions.getX(i0),
@@ -1112,5 +1123,276 @@ export class QMesh {
 
     console.log(`[QMesh] Spin: created ${newFaceIds.length} new faces with ${steps} steps at ${angle} radians`);
     return { newFaceIds };
+  }
+
+  /**
+   * Get QMesh face ID from BufferGeometry triangle index
+   * Used for mapping raycaster hits to QMesh faces
+   */
+  getFaceIdFromTriangleIndex(triangleIndex: number): string | null {
+    return this.triangleFaceMap.get(triangleIndex) || null;
+  }
+
+  /**
+   * Split a face along a cut line defined by two points
+   * This is the core operation for the knife tool
+   *
+   * @param faceId - The face to split
+   * @param cutPoint1 - First cut point (must be on an edge or vertex)
+   * @param cutPoint2 - Second cut point (must be on an edge or vertex)
+   * @returns IDs of the newly created faces
+   */
+  splitFace(
+    faceId: string,
+    cutPoint1: THREE.Vector3,
+    cutPoint2: THREE.Vector3
+  ): { newFaceIds: string[] } {
+    const face = this.faces.get(faceId);
+    if (!face) {
+      console.warn(`[QMesh] Face ${faceId} not found`);
+      return { newFaceIds: [] };
+    }
+
+    const vertices = face.getVertices();
+    const halfEdges = face.getHalfEdges();
+
+    if (vertices.length < 3) {
+      console.warn(`[QMesh] Face ${faceId} has < 3 vertices, cannot split`);
+      return { newFaceIds: [] };
+    }
+
+    console.log(`[QMesh] Splitting face ${faceId} (${vertices.length} vertices)`);
+
+    // Step 1: Find which edges the cut points lie on
+    const cut1Info = this.findCutPointOnFace(face, cutPoint1);
+    const cut2Info = this.findCutPointOnFace(face, cutPoint2);
+
+    if (!cut1Info || !cut2Info) {
+      console.warn(`[QMesh] Cut points not on face edges`);
+      return { newFaceIds: [] };
+    }
+
+    // Step 2: Create new vertices at cut points (if not on existing vertices)
+    const cut1VertexId = cut1Info.onVertex
+      ? cut1Info.onVertex.id
+      : this.createVertexOnEdge(cut1Info.edge!, cutPoint1);
+
+    const cut2VertexId = cut2Info.onVertex
+      ? cut2Info.onVertex.id
+      : this.createVertexOnEdge(cut2Info.edge!, cutPoint2);
+
+    // Step 3: Split the face into two faces along the cut line
+    const newFaceIds = this.splitFaceAlongLine(
+      faceId,
+      cut1VertexId,
+      cut2VertexId,
+      cut1Info.edgeIndex!,
+      cut2Info.edgeIndex!
+    );
+
+    // Step 4: Update topology
+    this.linkTwins();
+
+    console.log(`[QMesh] Split face ${faceId} → created ${newFaceIds.length} new faces`);
+    return { newFaceIds };
+  }
+
+  /**
+   * Find where a cut point intersects a face (on which edge or vertex)
+   */
+  private findCutPointOnFace(
+    face: QFace,
+    cutPoint: THREE.Vector3,
+    tolerance: number = 0.05
+  ): { onVertex?: QVertex; edge?: QHalfEdge; edgeIndex?: number } | null {
+    const vertices = face.getVertices();
+    const halfEdges = face.getHalfEdges();
+
+    // Check if cut point is on an existing vertex
+    for (let i = 0; i < vertices.length; i++) {
+      if (vertices[i].position.distanceTo(cutPoint) < tolerance) {
+        return { onVertex: vertices[i], edgeIndex: i };
+      }
+    }
+
+    // Check if cut point is on an edge
+    for (let i = 0; i < halfEdges.length; i++) {
+      const he = halfEdges[i];
+      const v1 = vertices[i];
+      const v2 = vertices[(i + 1) % vertices.length];
+
+      // Project cut point onto edge
+      const edgeVec = new THREE.Vector3().subVectors(v2.position, v1.position);
+      const pointVec = new THREE.Vector3().subVectors(cutPoint, v1.position);
+      const edgeLength = edgeVec.length();
+      const t = pointVec.dot(edgeVec) / (edgeLength * edgeLength);
+
+      // Check if projection is on the edge (0 < t < 1)
+      if (t > 0.01 && t < 0.99) {
+        const projection = v1.position.clone().add(edgeVec.multiplyScalar(t));
+        const distance = cutPoint.distanceTo(projection);
+
+        if (distance < tolerance) {
+          return { edge: he, edgeIndex: i };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Create a new vertex on an edge by splitting it
+   */
+  private createVertexOnEdge(halfEdge: QHalfEdge, position: THREE.Vector3): string {
+    const newVertexId = `v_${this.vertices.size}`;
+    const newVertex = new QVertex(newVertexId, position);
+    this.vertices.set(newVertexId, newVertex);
+
+    console.log(`[QMesh] Created vertex ${newVertexId} on edge`);
+    return newVertexId;
+  }
+
+  /**
+   * Split a face along a line between two vertices
+   * This creates two new faces from one face
+   */
+  private splitFaceAlongLine(
+    faceId: string,
+    cut1VertexId: string,
+    cut2VertexId: string,
+    edge1Index: number,
+    edge2Index: number
+  ): string[] {
+    const face = this.faces.get(faceId);
+    if (!face) return [];
+
+    const vertices = face.getVertices();
+    const halfEdges = face.getHalfEdges();
+
+    console.log(`[QMesh] Splitting face with ${vertices.length} vertices, cut on edges ${edge1Index} and ${edge2Index}`);
+
+    // Get cut vertices
+    const cut1Vertex = this.vertices.get(cut1VertexId)!;
+    const cut2Vertex = this.vertices.get(cut2VertexId)!;
+
+    // Build two new faces by walking around the original face
+    // CRITICAL: Use circular walking to handle ALL edge index orderings correctly
+    // (The old code broke when edge1Index > edge2Index — the loop never executed,
+    //  creating degenerate 2-vertex faces that appeared as holes.)
+
+    const faceAVertices: QVertex[] = [];
+    const faceBVertices: QVertex[] = [];
+    const N = vertices.length;
+
+    // Face A: cut1 → walk from (edge1+1) to edge2 (inclusive) → cut2
+    faceAVertices.push(cut1Vertex);
+    {
+      let i = (edge1Index + 1) % N;
+      const stop = (edge2Index + 1) % N;
+      while (i !== stop) {
+        faceAVertices.push(vertices[i]);
+        i = (i + 1) % N;
+      }
+    }
+    faceAVertices.push(cut2Vertex);
+
+    // Face B: cut2 → walk from (edge2+1) to edge1 (inclusive) → cut1
+    faceBVertices.push(cut2Vertex);
+    {
+      let i = (edge2Index + 1) % N;
+      const stop = (edge1Index + 1) % N;
+      while (i !== stop) {
+        faceBVertices.push(vertices[i]);
+        i = (i + 1) % N;
+      }
+    }
+    faceBVertices.push(cut1Vertex);
+
+    // Delete the original face and its half-edges
+    this.faces.delete(faceId);
+    halfEdges.forEach(he => this.halfEdges.delete(he.id));
+
+    // Debug: Log vertex orders
+    console.log(`[QMesh] Face A vertices:`, faceAVertices.map(v => v.id).join(' → '));
+    console.log(`[QMesh] Face B vertices:`, faceBVertices.map(v => v.id).join(' → '));
+
+    // Check face A winding order matches original
+    const originalNormal = face.calculateNormal();
+    console.log(`[QMesh] Original face normal:`, originalNormal.toArray());
+
+    // Create two new faces
+    const faceAId = `f_${this.faces.size}`;
+    const faceBId = `f_${this.faces.size + 1}`;
+
+    this.createFaceFromVertices(faceAId, faceAVertices);
+    this.createFaceFromVertices(faceBId, faceBVertices);
+
+    // Verify normals
+    const faceA = this.faces.get(faceAId)!;
+    const faceB = this.faces.get(faceBId)!;
+    const normalA = faceA.calculateNormal();
+    const normalB = faceB.calculateNormal();
+
+    console.log(`[QMesh] Face A normal:`, normalA.toArray(), '(dot with original:', normalA.dot(originalNormal), ')');
+    console.log(`[QMesh] Face B normal:`, normalB.toArray(), '(dot with original:', normalB.dot(originalNormal), ')');
+
+    // If normal is flipped (dot product < 0), reverse the vertex order!
+    if (normalA.dot(originalNormal) < 0) {
+      console.warn(`[QMesh] Face A has inverted normal! Reversing vertices...`);
+      const reversedA = [...faceAVertices].reverse();
+      this.faces.delete(faceAId);
+      this.createFaceFromVertices(faceAId, reversedA);
+    }
+
+    if (normalB.dot(originalNormal) < 0) {
+      console.warn(`[QMesh] Face B has inverted normal! Reversing vertices...`);
+      const reversedB = [...faceBVertices].reverse();
+      this.faces.delete(faceBId);
+      this.createFaceFromVertices(faceBId, reversedB);
+    }
+
+    console.log(`[QMesh] Split complete: ${faceAId} (${faceAVertices.length} verts), ${faceBId} (${faceBVertices.length} verts)`);
+
+    return [faceAId, faceBId];
+  }
+
+  /**
+   * Create a face from an ordered list of vertices
+   */
+  private createFaceFromVertices(faceId: string, vertices: QVertex[]): QFace {
+    const face = new QFace(faceId);
+    this.faces.set(faceId, face);
+
+    const newHalfEdges: QHalfEdge[] = [];
+    let heCounter = this.halfEdges.size;
+
+    // Create half-edges around the face
+    for (let i = 0; i < vertices.length; i++) {
+      const fromVertex = vertices[i];
+      const toVertex = vertices[(i + 1) % vertices.length];
+
+      const heId = `he_${heCounter++}`;
+      const he = new QHalfEdge(heId, toVertex);
+      he.face = face;
+
+      // Link to from vertex
+      if (!fromVertex.oneOutgoingHalfEdge) {
+        fromVertex.oneOutgoingHalfEdge = he;
+      }
+
+      this.halfEdges.set(heId, he);
+      newHalfEdges.push(he);
+    }
+
+    // Link next/prev
+    for (let i = 0; i < newHalfEdges.length; i++) {
+      newHalfEdges[i].next = newHalfEdges[(i + 1) % newHalfEdges.length];
+      newHalfEdges[i].prev = newHalfEdges[(i - 1 + newHalfEdges.length) % newHalfEdges.length];
+    }
+
+    face.oneHalfEdge = newHalfEdges[0];
+
+    return face;
   }
 }

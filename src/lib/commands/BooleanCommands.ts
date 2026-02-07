@@ -48,22 +48,48 @@ export class BooleanOperationCommand implements Command {
       throw new Error('Meshes not found in registry');
     }
 
+    // Clone meshes and apply world transforms
+    // CSG operations must be performed in world space!
+    const baseMeshClone = baseMesh.clone();
+    const toolMeshClone = toolMesh.clone();
+
+    // Apply world transforms to geometry
+    baseMesh.updateMatrixWorld(true);
+    toolMesh.updateMatrixWorld(true);
+
+    baseMeshClone.geometry = baseMesh.geometry.clone();
+    toolMeshClone.geometry = toolMesh.geometry.clone();
+
+    baseMeshClone.geometry.applyMatrix4(baseMesh.matrixWorld);
+    toolMeshClone.geometry.applyMatrix4(toolMesh.matrixWorld);
+
+    console.log('[BooleanCommand] Applying world transforms', {
+      basePosition: baseMesh.position.toArray(),
+      toolPosition: toolMesh.position.toArray(),
+      baseScale: baseMesh.scale.toArray(),
+      toolScale: toolMesh.scale.toArray()
+    });
+
     // Perform boolean operation
     let resultMesh: THREE.Mesh;
 
     switch (this.operation) {
       case 'union':
-        resultMesh = performUnion(baseMesh, toolMesh);
+        resultMesh = performUnion(baseMeshClone, toolMeshClone);
         break;
       case 'subtract':
-        resultMesh = performSubtract(baseMesh, toolMesh);
+        resultMesh = performSubtract(baseMeshClone, toolMeshClone);
         break;
       case 'intersect':
-        resultMesh = performIntersect(baseMesh, toolMesh);
+        resultMesh = performIntersect(baseMeshClone, toolMeshClone);
         break;
       default:
         throw new Error(`Unknown operation: ${this.operation}`);
     }
+
+    // Cleanup clones
+    baseMeshClone.geometry.dispose();
+    toolMeshClone.geometry.dispose();
 
     // Extract geometry data
     const geometry = resultMesh.geometry as THREE.BufferGeometry;

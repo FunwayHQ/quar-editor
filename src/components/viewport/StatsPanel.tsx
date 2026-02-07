@@ -75,6 +75,10 @@ export function FPSCounter() {
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh && object.geometry) {
           const geometry = object.geometry;
+          // Safety check for geometry attributes
+          if (!geometry || !geometry.attributes) {
+            return; // Skip broken geometry
+          }
           if (geometry.attributes.position) {
             totalVertices += geometry.attributes.position.count;
           }

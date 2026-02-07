@@ -9,15 +9,11 @@ import React from 'react';
 import { Scissors, Check, X } from 'lucide-react';
 import { useKnifeToolStore } from '../../stores/knifeToolStore';
 import { useEditModeStore } from '../../stores/editModeStore';
-import { useCommandStore } from '../../stores/commandStore';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
-import { projectCutOntoFace } from '../../lib/geometry/IntersectionUtils';
 import { MeshOperations } from '../../lib/mesh/MeshOperations';
-import { KnifeCutCommand } from '../../lib/commands/KnifeCutCommand';
-import { findQuadPair } from '../../lib/geometry/QuadDetection';
-import { cutQuadFace } from '../../lib/geometry/QuadKnifeCut';
 import { useObjectsStore } from '../../stores/objectsStore';
-import * as THREE from 'three';
+
+const { incrementGeometryVersion } = useEditModeStore.getState();
 
 export function KnifeToolPanel() {
   const {
@@ -33,7 +29,6 @@ export function KnifeToolPanel() {
   } = useKnifeToolStore();
 
   const { editingObjectId, setSelectionMode } = useEditModeStore();
-  const { executeCommand } = useCommandStore();
 
   if (!isActive || !editingObjectId) {
     return null;
@@ -50,203 +45,65 @@ export function KnifeToolPanel() {
       return;
     }
 
-    // Get mesh
-    const mesh = meshRegistry.getMesh(editingObjectId);
-    if (!mesh || !mesh.geometry) {
-      console.error('[KnifeTool] Mesh not found');
+    // Get QMesh from object store
+    const sceneObject = useObjectsStore.getState().getObject(editingObjectId);
+    if (!sceneObject || !sceneObject.qMesh) {
+      console.error('[KnifeTool] QMesh not found');
       return;
     }
 
-    // Store original geometry for undo
-    const originalGeo = mesh.geometry.clone();
+    const qMesh = sceneObject.qMesh;
 
-    // Sprint Y: Quad-aware cutting algorithm
+    // Map BufferGeometry triangle index to QMesh face ID
+    const faceId = qMesh.getFaceIdFromTriangleIndex(targetFaceIndex);
+    if (!faceId) {
+      console.error(`[KnifeTool] No QMesh face found for triangle ${targetFaceIndex}`);
+      return;
+    }
+
+    console.log(`[KnifeTool] Cutting QMesh face ${faceId} (triangle index: ${targetFaceIndex})`);
+
+    // Get cut points in world space
+    const cutPoint1World = drawingPath[0];
+    const cutPoint2World = drawingPath[1];
+
+    // Convert to local space (QMesh vertices are in local space)
+    const mesh = meshRegistry.getMesh(editingObjectId);
+    if (!mesh) {
+      console.error('[KnifeTool] Mesh not found in registry');
+      return;
+    }
+
+    const cutPoint1Local = cutPoint1World.clone();
+    const cutPoint2Local = cutPoint2World.clone();
+    mesh.worldToLocal(cutPoint1Local);
+    mesh.worldToLocal(cutPoint2Local);
+
+    // Use the new QMesh-based knife cut
     try {
-      if (cutMode === 'quad') {
-        // Quad mode: Use specialized algorithm that creates 2 quads (no diagonals)
-        const quadPair = findQuadPair(targetFaceIndex, mesh.geometry);
+      const result = MeshOperations.knifeCutQMesh(
+        editingObjectId,
+        faceId,
+        cutPoint1Local,
+        cutPoint2Local
+      );
 
-        if (quadPair !== null) {
-          console.log(`[KnifeTool] Quad mode: Cutting quad (faces ${targetFaceIndex} + ${quadPair}) into 2 quads`);
+      if (result.newFaceIds.length > 0) {
+        console.log(`[KnifeTool] ✓ Cut successful - created ${result.newFaceIds.length} new faces: ${result.newFaceIds.join(', ')}`);
 
-          // Project cut to find edge intersections (quad-aware in quad mode)
-          const edgeIntersections = projectCutOntoFace(
-            drawingPath[0],
-            drawingPath[1],
-            targetFaceIndex,
-            mesh.geometry,
-            mesh,
-            true // quadMode = true
-          );
+        // Force EditModeHelpers re-mount with fresh QMesh data
+        incrementGeometryVersion();
 
-          if (edgeIntersections.length !== 2) {
-            alert(`Cut must cross 2 edges. Found ${edgeIntersections.length}.`);
-            return;
-          }
-
-          // Convert to local space
-          const cutPointsLocal = edgeIntersections.map(ei => {
-            const localPoint = ei.point.clone();
-            mesh.worldToLocal(localPoint);
-            return {
-              point: localPoint,
-              faceIndex: targetFaceIndex,
-              edgeIndex: ei.edgeIndex,
-            };
-          });
-
-          // Use quad cut algorithm - creates 2 quads (4 triangles) preserving quad topology
-          let result;
-          try {
-            result = cutQuadFace(mesh.geometry, targetFaceIndex, cutPointsLocal);
-          } catch (error) {
-            console.error('[KnifeTool] Quad cut failed, falling back to triangle mode:', error);
-            alert('Quad cut failed (invalid topology). Using triangle mode instead.');
-            // Fall back to triangle cut below
-            throw error; // Re-throw to trigger triangle mode fallback
-          }
-
-          // Sprint 10: Update mesh.geometry directly (EditModeHelpers needs this!)
-          const oldGeometry = mesh.geometry;
-          const newGeometry = new THREE.BufferGeometry();
-
-          // Set attributes
-          newGeometry.setAttribute('position', new THREE.Float32BufferAttribute(result.newPositions, 3));
-          newGeometry.setIndex(new THREE.Uint32BufferAttribute(result.newIndices, 1));
-          newGeometry.computeVertexNormals();
-          newGeometry.computeBoundingBox();
-          newGeometry.computeBoundingSphere();
-
-          // Preserve existing userData and accumulate edges from multiple cuts
-          const existingFeatureEdges = (oldGeometry.userData?.featureEdges as string[]) || [];
-          const existingHiddenEdges = (oldGeometry.userData?.hiddenEdges as string[]) || [];
-
-          newGeometry.userData = {
-            ...oldGeometry.userData, // Preserve other userData
-            featureEdges: [...existingFeatureEdges, result.featureEdge],
-            hiddenEdges: [...existingHiddenEdges, ...result.diagonalEdges],
-          };
-
-          // Update mesh geometry and registry
-          mesh.geometry = newGeometry;
-          meshRegistry.registerMesh(editingObjectId, mesh);
-          oldGeometry.dispose();
-
-          console.log(`[KnifeTool] Quad cut complete - 1 quad → 2 quads\n  ✓ Feature edge: ${result.featureEdge}\n  ✗ Hidden diagonals: ${result.diagonalEdges.join(', ')}`);
-
-          // Sprint 10: Save to store IMMEDIATELY to trigger SceneObject geometry useMemo re-run
-          const pos = newGeometry.attributes.position;
-          const normals = newGeometry.attributes.normal;
-
-          useObjectsStore.getState().updateObject(editingObjectId, {
-            geometry: {
-              data: {
-                attributes: {
-                  position: {
-                    array: Array.from(pos.array),
-                    itemSize: pos.itemSize,
-                  },
-                  normal: {
-                    array: Array.from(normals.array),
-                    itemSize: normals.itemSize,
-                  },
-                },
-                index: {
-                  array: Array.from(newGeometry.index!.array),
-                },
-                userData: newGeometry.userData,
-              },
-            },
-          });
-
-          // Increment version to force EditModeHelpers re-render
-          useEditModeStore.getState().incrementGeometryVersion();
-
-          // Sprint 10: Switch to FACE mode to avoid edge topology complexity
-          setSelectionMode('face');
-          confirmCut();
-          deactivateTool();
-
-          console.log('[KnifeTool] Geometry saved to store, switched to face mode');
-          return; // Exit early
-        } else {
-          console.warn('[KnifeTool] No quad pair - falling back to triangle cut');
-          // Fall through to triangle mode
-        }
+        // Success - clean up
+        confirmCut();
+        deactivateTool();
       } else {
-        // Triangle mode: Standard knife cut
-        const edgeIntersections = projectCutOntoFace(
-          drawingPath[0],
-          drawingPath[1],
-          targetFaceIndex,
-          mesh.geometry,
-          mesh
-        );
-
-        if (edgeIntersections.length !== 2) {
-          alert(`Cut must cross 2 edges. Found ${edgeIntersections.length}.`);
-          return;
-        }
-
-        const cutIntersections = edgeIntersections.map(ei => {
-          const localPoint = ei.point.clone();
-          mesh.worldToLocal(localPoint);
-          return {
-            point: localPoint,
-            faceIndex: targetFaceIndex,
-            edgeIndex: ei.edgeIndex,
-          };
-        });
-
-        MeshOperations.knifeCut(mesh.geometry, cutIntersections);
+        console.warn('[KnifeTool] Cut failed - no new faces created');
+        alert('Cut failed. Make sure the cut line crosses the face.');
       }
-
-      // Sprint 10: Save NEW geometry to store (with feature edges + hidden edges metadata)
-      const geometry = mesh.geometry; // This is the NEW geometry now
-      const pos = geometry.attributes.position;
-      const normals = geometry.attributes.normal;
-      const uvs = geometry.attributes.uv; // Will be undefined (no UVs after knife cut)
-      const idx = geometry.index;
-
-      const geometryData = {
-        data: {
-          attributes: {
-            position: {
-              array: Array.from(pos.array),
-              itemSize: pos.itemSize,
-            },
-            normal: normals ? {
-              array: Array.from(normals.array),
-              itemSize: normals.itemSize,
-            } : undefined,
-            uv: uvs ? {
-              array: Array.from(uvs.array),
-              itemSize: uvs.itemSize,
-            } : undefined,
-          },
-          index: idx ? {
-            array: Array.from(idx.array),
-          } : undefined,
-          // Sprint Y: Include feature edges metadata
-          userData: geometry.userData || {},
-        },
-      };
-
-      useObjectsStore.getState().updateObject(editingObjectId, { geometry: geometryData });
-
-      console.log('[KnifeTool] Knife cut applied and saved to store');
-
-      // Clear the path
-      confirmCut();
-
-      // Deactivate knife tool and switch to edge mode to show new edges
-      deactivateTool();
-      setSelectionMode('edge');
-
-      console.log('[KnifeTool] Switched to edge mode to show new cut edge');
     } catch (error) {
-      console.error('[KnifeTool] Failed to apply knife cut:', error);
-      alert('Knife cut failed. See console for details.');
+      console.error('[KnifeTool] Cut failed:', error);
+      alert(`Cut failed: ${error}`);
     }
   };
 

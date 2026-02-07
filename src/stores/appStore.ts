@@ -5,7 +5,36 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, type StateStorage } from 'zustand/middleware';
+import { useConsentStore } from './consentStore';
+
+// Custom storage that checks consent before persisting preferences
+const consentAwareStorage: StateStorage = {
+  getItem: (name) => {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    // Only persist if user has consented to preferences
+    if (useConsentStore.getState().preferencesConsented) {
+      try {
+        localStorage.setItem(name, value);
+      } catch {
+        // localStorage full or unavailable
+      }
+    }
+  },
+  removeItem: (name) => {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // ignore
+    }
+  },
+};
 
 export interface AppState {
   // Theme
@@ -74,6 +103,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'quar-app-storage', // LocalStorage key
+      storage: consentAwareStorage,
       partialize: (state) => ({
         theme: state.theme,
         workspaceLayout: state.workspaceLayout,

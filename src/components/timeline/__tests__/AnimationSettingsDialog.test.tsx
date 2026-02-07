@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AnimationSettingsDialog, useAnimationSettingsDialog } from '../AnimationSettingsDialog';
 import { Animation } from '../../../types/animation';
@@ -168,7 +168,7 @@ describe('AnimationSettingsDialog', () => {
     }
   });
 
-  it('saves changes on Save button', () => {
+  it('saves changes on Save button', async () => {
     render(
       <AnimationSettingsDialog
         isOpen={true}
@@ -179,13 +179,19 @@ describe('AnimationSettingsDialog', () => {
 
     // Change name
     const nameInput = screen.getByDisplayValue('Test Animation');
-    fireEvent.change(nameInput, { target: { value: 'Updated Animation' } });
+
+    await act(async () => {
+      fireEvent.change(nameInput, { target: { value: 'Updated Animation' } });
+    });
 
     // Save
     const saveButton = screen.getByText('Save Changes');
-    fireEvent.click(saveButton);
 
-    // Should close after saving (synchronous operation)
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+
+    // Should close after saving
     expect(mockOnClose).toHaveBeenCalled();
   });
 

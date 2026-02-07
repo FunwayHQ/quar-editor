@@ -91,13 +91,15 @@ export function EditTransformControls({ mode }: EditTransformControlsProps) {
       });
     } else if (selectionMode === 'face' && selectedFaces.size > 0) {
       selectedFaces.forEach(faceId => {
-        const face = qMesh.faces.get(faceId);
-        if (face) {
-          const vertices = face.getVertices();
-          vertices.forEach(vertex => {
-            center.add(vertex.position);
-            count++;
-          });
+        if (qMesh.faces && qMesh.faces instanceof Map) {
+          const face = qMesh.faces.get(faceId);
+          if (face) {
+            const vertices = face.getVertices();
+            vertices.forEach(vertex => {
+              center.add(vertex.position);
+              count++;
+            });
+          }
         }
       });
     }
@@ -156,14 +158,16 @@ export function EditTransformControls({ mode }: EditTransformControlsProps) {
       });
     } else if (selectionMode === 'face') {
       selectedFaces.forEach(faceId => {
-        const face = qMesh.faces.get(faceId);
-        if (face) {
-          const vertices = face.getVertices();
-          vertices.forEach(vertex => {
-            if (!initialPositionsRef.current.has(vertex.id)) {
-              initialPositionsRef.current.set(vertex.id, vertex.position.clone());
-            }
-          });
+        if (qMesh.faces && qMesh.faces instanceof Map) {
+          const face = qMesh.faces.get(faceId);
+          if (face) {
+            const vertices = face.getVertices();
+            vertices.forEach(vertex => {
+              if (!initialPositionsRef.current.has(vertex.id)) {
+                initialPositionsRef.current.set(vertex.id, vertex.position.clone());
+              }
+            });
+          }
         }
       });
     }
