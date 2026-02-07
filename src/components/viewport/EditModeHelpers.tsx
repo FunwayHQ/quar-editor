@@ -6,7 +6,7 @@
  * REFACTORED: Now uses QMesh string IDs
  */
 
-import React, { useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { useEditModeStore, makeEdgeKey } from '../../stores/editModeStore';
 import { useObjectsStore } from '../../stores/objectsStore';
@@ -34,30 +34,34 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
   const sceneObject = objects.get(objectId);
   const qMesh = sceneObject?.qMesh;
 
-  // Track created geometries and materials for disposal
-  const geometriesRef = useRef<THREE.BufferGeometry[]>([]);
-  const materialsRef = useRef<THREE.Material[]>([]);
+  // Shared resources — created once, disposed on unmount
+  const sharedGeoRef = useRef<THREE.BufferGeometry[]>([]);
+  const sharedMatRef = useRef<THREE.Material[]>([]);
+  // Per-update resources — disposed on each recomputation + unmount
+  const faceGeosRef = useRef<THREE.BufferGeometry[]>([]);
+  const edgesGeoRef = useRef<THREE.BufferGeometry | null>(null);
   const cylinderCacheRef = useRef<Map<string, THREE.CylinderGeometry>>(new Map());
 
-  // Cleanup geometries and materials on unmount or selection change
+  // Cleanup ALL resources on unmount only
   useEffect(() => {
     return () => {
-      // Dispose all tracked geometries
-      geometriesRef.current.forEach(geo => geo.dispose());
-      geometriesRef.current = [];
-
-      // Dispose all tracked materials
-      materialsRef.current.forEach(mat => mat.dispose());
-      materialsRef.current = [];
-
-      // Dispose cylinder cache
+      sharedGeoRef.current.forEach(g => g.dispose());
+      sharedGeoRef.current = [];
+      sharedMatRef.current.forEach(m => m.dispose());
+      sharedMatRef.current = [];
+      faceGeosRef.current.forEach(g => g.dispose());
+      faceGeosRef.current = [];
+      if (edgesGeoRef.current) {
+        edgesGeoRef.current.dispose();
+        edgesGeoRef.current = null;
+      }
       cylinderCacheRef.current.forEach(geo => geo.dispose());
       cylinderCacheRef.current.clear();
     };
-  }, [selectedFaces, selectedVertices, selectedEdges, selectionMode]);
+  }, []);
 
-  // Helper to get/create cached cylinder geometry
-  const getCylinderGeometry = (radiusTop: number, radiusBottom: number, length: number, segments: number) => {
+  // Helper to get/create cached cylinder geometry (stable ref via useCallback)
+  const getCylinderGeometry = useCallback((radiusTop: number, radiusBottom: number, length: number, segments: number) => {
     // Round length to nearest 0.1 to reuse similar cylinders
     const roundedLength = Math.round(length * 10) / 10;
     const key = `${radiusTop}-${radiusBottom}-${roundedLength}-${segments}`;
@@ -68,7 +72,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     }
 
     return cylinderCacheRef.current.get(key)!;
-  };
+  }, []);
 
   // Only show helpers for the object being edited
   if (editingObjectId !== objectId) return null;
@@ -85,7 +89,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     const edgeEndpoint = new THREE.SphereGeometry(0.015, 8, 8);    // Was 0.03
     const edgeEndpointSmall = new THREE.SphereGeometry(0.008, 6, 6); // Was 0.015
 
-    geometriesRef.current.push(outerGlow, coreSphere, unselectedSphere, edgeEndpoint, edgeEndpointSmall);
+    sharedGeoRef.current.push(outerGlow, coreSphere, unselectedSphere, edgeEndpoint, edgeEndpointSmall);
 
     return { outerGlow, coreSphere, unselectedSphere, edgeEndpoint, edgeEndpointSmall };
   }, []);
@@ -103,7 +107,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     const goldFace = new THREE.MeshBasicMaterial({ color: "#FFD700", side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
     const purpleWireframe = new THREE.LineBasicMaterial({ color: "#7C3AED", opacity: 0.3, transparent: true, depthTest: false, depthWrite: false });
 
-    materialsRef.current.push(goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible, goldFace, purpleWireframe);
+    sharedMatRef.current.push(goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible, goldFace, purpleWireframe);
 
     return { goldGlow, yellow, purpleDark, goldSolid, purpleGlow, purpleDarkEdge, yellowEdge, invisible, goldFace, purpleWireframe };
   }, []);
@@ -265,6 +269,10 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
 
   // Create face helpers (REFACTORED for QMesh - supports quads and N-gons!)
   const faceHelpers = useMemo(() => {
+    // Dispose previous face geometries before creating new ones
+    faceGeosRef.current.forEach(g => g.dispose());
+    faceGeosRef.current = [];
+
     if (selectionMode !== 'face' || !qMesh) return null;
 
     const faces: JSX.Element[] = [];
@@ -288,7 +296,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
 
       // Create geometry for this face (triangulate for rendering)
       const faceGeometry = new THREE.BufferGeometry();
-      geometriesRef.current.push(faceGeometry); // Track for disposal
+      faceGeosRef.current.push(faceGeometry); // Track for disposal
 
       // Triangulate the face using fan triangulation
       const positions: number[] = [];
@@ -328,6 +336,12 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
 
   // Create edges geometry for face mode wireframe (REFACTORED for QMesh)
   const edgesGeometry = useMemo(() => {
+    // Dispose previous edges geometry
+    if (edgesGeoRef.current) {
+      edgesGeoRef.current.dispose();
+      edgesGeoRef.current = null;
+    }
+
     if (selectionMode !== 'face' || !qMesh) return null;
 
     // Get all edges from QMesh
@@ -345,7 +359,7 @@ export function EditModeHelpers({ mesh, objectId }: EditModeHelpersProps) {
     });
 
     edgesGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
-    geometriesRef.current.push(edgesGeo); // Track for disposal
+    edgesGeoRef.current = edgesGeo; // Track for disposal
 
     return edgesGeo;
   }, [selectionMode, qMesh, geometryVersion]);
