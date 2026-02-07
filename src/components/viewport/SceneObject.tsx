@@ -341,10 +341,14 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   // Create material with PBR properties
   const material = useMemo(() => {
     // Override material based on shading mode
+    // In edit mode, always use DoubleSide so faces are visible regardless of winding order
+    const editSide = (isEditMode && editingObjectId === object.id) ? THREE.DoubleSide : THREE.FrontSide;
+
     if (shadingMode === 'wireframe') {
       return new THREE.MeshBasicMaterial({
         color: materialColor,
         wireframe: true,
+        side: editSide,
       });
     }
 
@@ -353,6 +357,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
         color: isSelected ? '#7C3AED' : '#CCCCCC',
         metalness: 0.1,
         roughness: 0.8,
+        side: editSide,
       });
     }
 
@@ -365,7 +370,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
         roughness: assignedMaterial.roughness,
         transparent: assignedMaterial.transparent,
         opacity: assignedMaterial.opacity,
-        side: assignedMaterial.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+        side: (assignedMaterial.doubleSided || editSide === THREE.DoubleSide) ? THREE.DoubleSide : THREE.FrontSide,
       };
 
       // Add emissive properties
@@ -439,6 +444,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       color: isSelected ? 0x7C3AED : 0x888888,
       metalness: 0.3,
       roughness: 0.7,
+      side: editSide,
     });
   }, [
     shadingMode,
@@ -459,6 +465,9 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     assignedMaterial?.displacementMap,
     isSelected,
     getTexture,
+    isEditMode,
+    editingObjectId,
+    object.id,
   ]);
 
   // Register mesh with registry when it's available
@@ -526,37 +535,72 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
         (i: any) => i.object?.isMesh
       );
       if (intersection) {
-        // Try to find nearby edge to snap to
-        // Sprint Y: Edge-only knife tool (must click near edge)
-        const nearbyEdge = findNearbyEdge(
-          intersection.point,
-          meshRef.current.geometry,
-          meshRef.current,
-          0.2 // Snap threshold - generous for ease of use
-        );
+        // Snap to QMesh face edges (not BufferGeometry triangulation diagonals)
+        const sceneObjForSnap = useObjectsStore.getState().getObject(editingObjectId);
+        const qMesh = sceneObjForSnap?.qMesh;
 
         let snapPoint: THREE.Vector3;
 
-        if (nearbyEdge) {
-          // Snap to edge - find closest point on that edge
-          const positions = meshRef.current.geometry.attributes.position;
-          const [v0Idx, v1Idx] = nearbyEdge;
+        if (qMesh && intersection.faceIndex !== undefined) {
+          // Find the QMesh face from the triangle index
+          const qFaceId = qMesh.getFaceIdFromTriangleIndex(intersection.faceIndex);
+          const qFace = qFaceId ? qMesh.faces.get(qFaceId) : null;
 
-          const p0 = new THREE.Vector3().fromBufferAttribute(positions, v0Idx);
-          const p1 = new THREE.Vector3().fromBufferAttribute(positions, v1Idx);
+          if (qFace) {
+            // Snap to nearest REAL edge of the QMesh face
+            const faceVerts = qFace.getVertices();
+            let bestDist = Infinity;
+            let bestSnapPoint: THREE.Vector3 | null = null;
 
-          // Transform to world space
-          meshRef.current.localToWorld(p0);
-          meshRef.current.localToWorld(p1);
+            for (let i = 0; i < faceVerts.length; i++) {
+              const p0 = faceVerts[i].position.clone();
+              const p1 = faceVerts[(i + 1) % faceVerts.length].position.clone();
 
-          // Find closest point on the edge
-          snapPoint = closestPointOnLine(p0, p1, intersection.point);
+              // Transform to world space
+              meshRef.current.localToWorld(p0);
+              meshRef.current.localToWorld(p1);
 
-          console.log('[KnifeTool] Snapped to edge:', nearbyEdge);
+              const candidate = closestPointOnLine(p0, p1, intersection.point);
+              const dist = intersection.point.distanceTo(candidate);
+
+              if (dist < bestDist) {
+                bestDist = dist;
+                bestSnapPoint = candidate;
+              }
+            }
+
+            if (bestSnapPoint && bestDist < 0.5) {
+              snapPoint = bestSnapPoint;
+              console.log('[KnifeTool] Snapped to QMesh edge, dist:', bestDist.toFixed(3));
+            } else {
+              console.warn('[KnifeTool] Click must be near an edge. Click closer to an edge.');
+              return;
+            }
+          } else {
+            console.warn('[KnifeTool] Could not find QMesh face for triangle', intersection.faceIndex);
+            return;
+          }
         } else {
-          // Sprint Y: REQUIRE edge snapping - don't allow points away from edges
-          console.warn('[KnifeTool] Click must be near an edge. Click closer to an edge.');
-          return; // Reject this click
+          // Fallback to BufferGeometry edge snapping
+          const nearbyEdge = findNearbyEdge(
+            intersection.point,
+            meshRef.current.geometry,
+            meshRef.current,
+            0.5
+          );
+
+          if (nearbyEdge) {
+            const positions = meshRef.current.geometry.attributes.position;
+            const [v0Idx, v1Idx] = nearbyEdge;
+            const p0 = new THREE.Vector3().fromBufferAttribute(positions, v0Idx);
+            const p1 = new THREE.Vector3().fromBufferAttribute(positions, v1Idx);
+            meshRef.current.localToWorld(p0);
+            meshRef.current.localToWorld(p1);
+            snapPoint = closestPointOnLine(p0, p1, intersection.point);
+          } else {
+            console.warn('[KnifeTool] Click must be near an edge. Click closer to an edge.');
+            return;
+          }
         }
 
         // Validate: second point must be on the same QMesh face

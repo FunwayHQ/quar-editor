@@ -65,7 +65,7 @@ export const useKnifeToolStore = create<KnifeToolState>((set, get) => ({
       isDrawing: false,
       drawingPath: [],
       intersectionPoints: [],
-      // targetFaceIndex: null, // REMOVED - keep the current target face!
+      targetFaceIndex: null, // Must reset so first click isn't blocked by stale face index
     });
   },
 
@@ -77,6 +77,7 @@ export const useKnifeToolStore = create<KnifeToolState>((set, get) => ({
       isDrawing: false,
       drawingPath: [],
       intersectionPoints: [],
+      targetFaceIndex: null,
     });
   },
 
