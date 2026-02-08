@@ -6,6 +6,7 @@
  */
 
 import React, { useRef, useMemo, useEffect, useState } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SceneObject as SceneObjectType, useObjectsStore } from '../../stores/objectsStore';
 import { useMaterialsStore } from '../../stores/materialsStore';
@@ -27,18 +28,54 @@ import {
 import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
 
 // QMesh wireframe: renders actual quad/polygon edges instead of triangulation diagonals
+// Uses useFrame to stay in sync during vertex drag (QMesh is mutated in place)
 function QMeshWireframe({ qMesh, color }: { qMesh: { getEdges: () => Array<{ v1: { position: THREE.Vector3 }; v2: { position: THREE.Vector3 }; edgeKey: string }> }; color: string }) {
+  const lineRef = useRef<THREE.LineSegments>(null);
+  const lastEdgeCountRef = useRef(0);
+
   const edgesGeo = useMemo(() => {
     const edges = qMesh.getEdges();
-    const positions: number[] = [];
+    lastEdgeCountRef.current = edges.length;
+    const positions = new Float32Array(edges.length * 6);
+    let i = 0;
     edges.forEach(({ v1, v2 }) => {
-      positions.push(v1.position.x, v1.position.y, v1.position.z);
-      positions.push(v2.position.x, v2.position.y, v2.position.z);
+      positions[i++] = v1.position.x; positions[i++] = v1.position.y; positions[i++] = v1.position.z;
+      positions[i++] = v2.position.x; positions[i++] = v2.position.y; positions[i++] = v2.position.z;
     });
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return geo;
   }, [qMesh]);
+
+  // Update edge positions every frame to track vertex movement during drag
+  useFrame(() => {
+    if (!lineRef.current) return;
+    const geo = lineRef.current.geometry;
+    const posAttr = geo.attributes.position as THREE.BufferAttribute;
+    if (!posAttr) return;
+
+    const edges = qMesh.getEdges();
+    // If edge count changed (knife cut), rebuild geometry
+    if (edges.length !== lastEdgeCountRef.current) {
+      lastEdgeCountRef.current = edges.length;
+      const positions = new Float32Array(edges.length * 6);
+      let i = 0;
+      edges.forEach(({ v1, v2 }) => {
+        positions[i++] = v1.position.x; positions[i++] = v1.position.y; positions[i++] = v1.position.z;
+        positions[i++] = v2.position.x; positions[i++] = v2.position.y; positions[i++] = v2.position.z;
+      });
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      return;
+    }
+
+    const arr = posAttr.array as Float32Array;
+    let i = 0;
+    edges.forEach(({ v1, v2 }) => {
+      arr[i++] = v1.position.x; arr[i++] = v1.position.y; arr[i++] = v1.position.z;
+      arr[i++] = v2.position.x; arr[i++] = v2.position.y; arr[i++] = v2.position.z;
+    });
+    posAttr.needsUpdate = true;
+  });
 
   const edgeMaterial = useMemo(() => {
     return new THREE.LineBasicMaterial({ color });
@@ -51,7 +88,7 @@ function QMeshWireframe({ qMesh, color }: { qMesh: { getEdges: () => Array<{ v1:
     };
   }, [edgesGeo, edgeMaterial]);
 
-  return <lineSegments geometry={edgesGeo} material={edgeMaterial} raycast={() => {}} />;
+  return <lineSegments ref={lineRef} geometry={edgesGeo} material={edgeMaterial} raycast={() => {}} />;
 }
 
 // Sprint Y: Memoized knife wireframe to prevent memory leak
