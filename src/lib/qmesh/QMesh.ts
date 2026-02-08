@@ -1379,12 +1379,21 @@ export class QMesh {
       return [];
     }
 
+    // Compute original normal from saved vertices BEFORE deletion
+    // (face.calculateNormal() would use corrupted half-edge twins from createVertexOnEdge)
+    const originalNormal = new THREE.Vector3();
+    for (let i = 0; i < vertices.length; i++) {
+      const v1 = vertices[i].position;
+      const v2 = vertices[(i + 1) % vertices.length].position;
+      originalNormal.x += (v1.y - v2.y) * (v1.z + v2.z);
+      originalNormal.y += (v1.z - v2.z) * (v1.x + v2.x);
+      originalNormal.z += (v1.x - v2.x) * (v1.y + v2.y);
+    }
+    originalNormal.normalize();
+
     // Delete the original face and its half-edges
     this.faces.delete(faceId);
     halfEdges.forEach(he => this.halfEdges.delete(he.id));
-
-    // Check face A winding order matches original
-    const originalNormal = face.calculateNormal();
 
     // Create two new faces
     const faceAId = this.nextFaceId();
@@ -1393,20 +1402,24 @@ export class QMesh {
     this.createFaceFromVertices(faceAId, dedupA);
     this.createFaceFromVertices(faceBId, dedupB);
 
-    // Verify normals
+    // Verify normals match original face orientation
     const faceA = this.faces.get(faceAId)!;
     const faceB = this.faces.get(faceBId)!;
     const normalA = faceA.calculateNormal();
     const normalB = faceB.calculateNormal();
+    const dotA = normalA.dot(originalNormal);
+    const dotB = normalB.dot(originalNormal);
 
-    // If normal is flipped (dot product < 0), reverse the vertex order!
-    if (normalA.dot(originalNormal) < 0) {
+    // If normal is flipped or nearly perpendicular, reverse the vertex order
+    if (dotA < 0.1) {
+      console.log(`[QMesh] Flipping face A winding (dot=${dotA.toFixed(3)})`);
       const reversedA = [...dedupA].reverse();
       this.faces.delete(faceAId);
       this.createFaceFromVertices(faceAId, reversedA);
     }
 
-    if (normalB.dot(originalNormal) < 0) {
+    if (dotB < 0.1) {
+      console.log(`[QMesh] Flipping face B winding (dot=${dotB.toFixed(3)})`);
       const reversedB = [...dedupB].reverse();
       this.faces.delete(faceBId);
       this.createFaceFromVertices(faceBId, reversedB);
