@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Folder, Download, Shield, Database, Trash2, FileDown } from 'lucide-react';
+import { Plus, Folder, Download, Shield, Database, Trash2, FileDown, HelpCircle } from 'lucide-react';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
 import { useAppStore } from '../stores/appStore';
 import { useConsentStore } from '../stores/consentStore';
@@ -176,7 +176,7 @@ export function WelcomeScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col relative overflow-x-hidden">
       {/* Subtle radial gradient background */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -350,6 +350,14 @@ export function WelcomeScreen() {
             className="text-accent hover:underline"
           >
             Manage Data
+          </button>
+          {' • '}
+          <button
+            onClick={() => navigate('/help')}
+            className="text-accent hover:underline inline-flex items-center gap-1"
+          >
+            <HelpCircle className="w-3.5 h-3.5 inline" />
+            Help & Guide
           </button>
         </p>
       </footer>

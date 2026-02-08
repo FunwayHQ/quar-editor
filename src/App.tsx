@@ -9,6 +9,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppStore } from './stores/appStore';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { Editor } from './components/Editor';
+import { HelpPage } from './components/HelpPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/Toast';
 import { ConsentBanner } from './components/ConsentBanner';
@@ -36,6 +37,7 @@ function App() {
             <Route path="/" element={<WelcomeScreen />} />
             <Route path="/editor" element={<Editor />} />
             <Route path="/editor/:projectId" element={<Editor />} />
+            <Route path="/help" element={<HelpPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ErrorBoundary>
