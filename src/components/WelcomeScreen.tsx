@@ -30,6 +30,12 @@ export function WelcomeScreen() {
 
   const storage = getStorageAdapter();
 
+  // Allow page scrolling on welcome screen (global body has overflow:hidden for the editor)
+  useEffect(() => {
+    document.body.style.overflow = 'auto';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
   useEffect(() => {
     loadProjects();
   }, []);
