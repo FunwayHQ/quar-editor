@@ -79,7 +79,7 @@ export function HelpPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
+    <div className="h-screen bg-background flex flex-col relative overflow-hidden">
       {/* Background gradient */}
       <div
         className="absolute inset-0 pointer-events-none"
