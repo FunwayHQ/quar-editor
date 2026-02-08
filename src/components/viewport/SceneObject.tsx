@@ -304,7 +304,37 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       return geo;
     }
 
-    // Handle imported geometry
+    // Handle serialized geometry from auto-save (importedGeometry.data has BufferGeometry attributes)
+    if ((object.importedGeometry as any)?.data?.attributes?.position) {
+      const data = (object.importedGeometry as any).data;
+      console.log(`[SceneObject] Restoring auto-saved geometry for ${object.name}`);
+      const geo = new THREE.BufferGeometry();
+
+      if (data.attributes.position) {
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(
+          new Float32Array(data.attributes.position.array), data.attributes.position.itemSize
+        ));
+      }
+      if (data.attributes.normal) {
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(
+          new Float32Array(data.attributes.normal.array), data.attributes.normal.itemSize
+        ));
+      }
+      if (data.attributes.uv) {
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(
+          new Float32Array(data.attributes.uv.array), data.attributes.uv.itemSize
+        ));
+      }
+      if (data.index) {
+        geo.setIndex(new THREE.Uint32BufferAttribute(new Uint32Array(data.index.array), 1));
+      }
+
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+      return geo;
+    }
+
+    // Handle imported geometry (original import format with flat arrays)
     if (object.type === 'imported' && object.importedGeometry) {
       const geo = new THREE.BufferGeometry();
       const { vertices, normals, uvs, indices } = object.importedGeometry;
