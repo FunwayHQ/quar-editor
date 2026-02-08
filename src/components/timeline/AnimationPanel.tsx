@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { Film, Trash2, Plus, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import { useAnimationStore } from '../../stores/animationStore';
 import { useCommandStore } from '../../stores/commandStore';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { CreateAnimationCommand, DeleteAnimationCommand } from '../../lib/commands/AnimationCommands';
 import { ConfirmDialog, useConfirmDialog } from '../ConfirmDialog';
 import { AnimationSettingsDialog, useAnimationSettingsDialog } from './AnimationSettingsDialog';
@@ -25,8 +26,19 @@ export function AnimationPanel() {
   const { executeCommand } = useCommandStore();
   const { dialogProps, showConfirm } = useConfirmDialog();
   const { dialogProps: settingsDialogProps, openSettings } = useAnimationSettingsDialog();
+  const showContextMenu = useContextMenuStore((state) => state.showContextMenu);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Listen for animation settings event from context menu
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const anim = (e as CustomEvent).detail?.animation;
+      if (anim) openSettings(anim);
+    };
+    window.addEventListener('quar-animation-settings', handler);
+    return () => window.removeEventListener('quar-animation-settings', handler);
+  }, [openSettings]);
 
   const activeAnimation = activeAnimationId ? animations.get(activeAnimationId) : null;
   const allAnimations = Array.from(animations.values());
@@ -87,6 +99,12 @@ export function AnimationPanel() {
                     ? 'bg-[#7C3AED]/20 border-l-2 border-l-[#7C3AED]'
                     : 'hover:bg-[#27272A]/30'
                 }`}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setActiveAnimation(anim.id);
+                  showContextMenu(e.clientX, e.clientY, 'animation-item', anim.id);
+                }}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span

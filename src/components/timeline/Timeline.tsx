@@ -15,6 +15,7 @@ import { AnimationPanel } from './AnimationPanel';
 import { CurveEditor } from './CurveEditor';
 import { UpdateKeyframeCommand, RemoveTrackCommand, RemoveKeyframeCommand } from '../../lib/commands/AnimationCommands';
 import { getAnimationEngine } from '../../lib/animation/AnimationEngine';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { ConfirmDialog, useConfirmDialog } from '../ConfirmDialog';
 
 export function Timeline() {
@@ -32,8 +33,28 @@ export function Timeline() {
   const { getAllObjects } = useObjectsStore();
   const { executeCommand } = useCommandStore();
   const { dialogProps, showConfirm } = useConfirmDialog();
+  const showContextMenu = useContextMenuStore((state) => state.showContextMenu);
 
   const activeAnimation = activeAnimationId ? animations.get(activeAnimationId) : null;
+
+  // Listen for select-all-keyframes event from context menu
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const animId = (e as CustomEvent).detail?.animationId;
+      if (!animId) return;
+      const anim = animations.get(animId);
+      if (!anim) return;
+      const allKfs: Array<{ trackId: string; keyframeId: string }> = [];
+      anim.tracks.forEach(track => {
+        track.keyframes.forEach(kf => {
+          allKfs.push({ trackId: track.id, keyframeId: kf.id });
+        });
+      });
+      setSelectedKeyframes(allKfs);
+    };
+    window.addEventListener('quar-select-all-keyframes', handler);
+    return () => window.removeEventListener('quar-select-all-keyframes', handler);
+  }, [animations]);
   const timelineRef = useRef<HTMLDivElement>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
   const [isDraggingScrubber, setIsDraggingScrubber] = useState(false);
@@ -452,6 +473,10 @@ export function Timeline() {
                   <div
                     key={track.id}
                     className="p-2 border-b border-[#27272A]/50 hover:bg-[#27272A]/30 transition-colors group"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      showContextMenu(e.clientX, e.clientY, 'timeline-track', track.id, { animationId: activeAnimationId });
+                    }}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1 text-xs flex-1 min-w-0">
@@ -526,6 +551,14 @@ export function Timeline() {
             ref={timelineRef}
             className="flex-1 relative overflow-x-auto overflow-y-auto cursor-crosshair"
             onMouseDown={handleTimelineMouseDown}
+            onContextMenu={(e) => {
+              // Only show context menu if not clicking on a keyframe
+              const target = e.target as HTMLElement;
+              if (!target.closest('[data-keyframe]')) {
+                e.preventDefault();
+                showContextMenu(e.clientX, e.clientY, 'timeline-empty', null, { animationId: activeAnimationId });
+              }
+            }}
           >
             {activeAnimation && activeAnimation.tracks?.map((track, trackIndex) => (
               <div
@@ -540,6 +573,15 @@ export function Timeline() {
                       key={keyframe.id}
                       data-keyframe="true"
                       onClick={(e) => handleKeyframeClick(track.id, keyframe.id, e)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!isSelected) setSelectedKeyframes([{ trackId: track.id, keyframeId: keyframe.id }]);
+                        showContextMenu(e.clientX, e.clientY, 'timeline-keyframe', keyframe.id, {
+                          trackId: track.id,
+                          animationId: activeAnimationId,
+                        });
+                      }}
                       className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-sm border-2 cursor-pointer hover:scale-125 transition-transform ${
                         isSelected ? 'bg-[#A855F7] border-[#A855F7] scale-125 shadow-lg shadow-[#A855F7]/50' : 'bg-[#7C3AED] border-white'
                       }`}
