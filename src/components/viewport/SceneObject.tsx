@@ -26,6 +26,34 @@ import {
 } from '../../lib/geometry/IntersectionUtils';
 import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
 
+// QMesh wireframe: renders actual quad/polygon edges instead of triangulation diagonals
+function QMeshWireframe({ qMesh, color }: { qMesh: { getEdges: () => Array<{ v1: { position: THREE.Vector3 }; v2: { position: THREE.Vector3 }; edgeKey: string }> }; color: string }) {
+  const edgesGeo = useMemo(() => {
+    const edges = qMesh.getEdges();
+    const positions: number[] = [];
+    edges.forEach(({ v1, v2 }) => {
+      positions.push(v1.position.x, v1.position.y, v1.position.z);
+      positions.push(v2.position.x, v2.position.y, v2.position.z);
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return geo;
+  }, [qMesh]);
+
+  const edgeMaterial = useMemo(() => {
+    return new THREE.LineBasicMaterial({ color });
+  }, [color]);
+
+  useEffect(() => {
+    return () => {
+      edgesGeo.dispose();
+      edgeMaterial.dispose();
+    };
+  }, [edgesGeo, edgeMaterial]);
+
+  return <lineSegments geometry={edgesGeo} material={edgeMaterial} raycast={() => {}} />;
+}
+
 // Sprint Y: Memoized knife wireframe to prevent memory leak
 function KnifeWireframe({ geometry }: { geometry: THREE.BufferGeometry }) {
   const edgesGeo = useMemo(() => {
@@ -345,6 +373,16 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     const editSide = (isEditMode && editingObjectId === object.id) || object.type === 'plane' ? THREE.DoubleSide : THREE.FrontSide;
 
     if (shadingMode === 'wireframe') {
+      // If object has QMesh, render transparent mesh (still raycastable for selection)
+      // QMeshWireframe component renders the actual quad edges
+      if (object.qMesh) {
+        return new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0,
+          side: editSide,
+          depthWrite: false,
+        });
+      }
       return new THREE.MeshBasicMaterial({
         color: materialColor,
         wireframe: true,
@@ -468,6 +506,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     isEditMode,
     editingObjectId,
     object.id,
+    object.qMesh,
   ]);
 
   // Register mesh with registry when it's available
@@ -910,6 +949,11 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             castShadow
             receiveShadow
           />
+
+          {/* QMesh wireframe: show actual quad/polygon edges instead of triangulation */}
+          {shadingMode === 'wireframe' && object.qMesh && (
+            <QMeshWireframe qMesh={object.qMesh} color={materialColor} />
+          )}
 
           {/* Invisible bounding box for easier selection - TEMPORARILY DISABLED for debugging */}
           {/* {!isEditMode && boundingBoxRef.current && (
