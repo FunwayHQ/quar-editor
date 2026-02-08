@@ -341,8 +341,8 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   // Create material with PBR properties
   const material = useMemo(() => {
     // Override material based on shading mode
-    // In edit mode, always use DoubleSide so faces are visible regardless of winding order
-    const editSide = (isEditMode && editingObjectId === object.id) ? THREE.DoubleSide : THREE.FrontSide;
+    // Use DoubleSide in edit mode and for planes (single-sided surfaces need to be visible from both sides)
+    const editSide = (isEditMode && editingObjectId === object.id) || object.type === 'plane' ? THREE.DoubleSide : THREE.FrontSide;
 
     if (shadingMode === 'wireframe') {
       return new THREE.MeshBasicMaterial({
@@ -660,10 +660,10 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
   };
 
-  if (!object.visible) return null;
-
-  // Get pose mode state for bone rendering
+  // Get pose mode state for bone rendering (must be before any early returns)
   const { isPoseMode } = useBoneStore();
+
+  if (!object.visible) return null;
 
   // Render bones
   if (object.type === 'bone') {

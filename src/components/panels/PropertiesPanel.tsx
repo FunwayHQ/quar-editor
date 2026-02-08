@@ -198,7 +198,6 @@ export function PropertiesPanel() {
                 type="checkbox"
                 checked={selectedObject.visible}
                 onChange={(e) => handlePropertyChange('visible', e.target.checked)}
-                className="w-4 h-4 rounded border-[#27272A] bg-[#0A0A0B] text-[#7C3AED] focus:ring-[#7C3AED] focus:ring-offset-0"
               />
               <span className="text-sm text-[#FAFAFA]">Visible</span>
             </label>
@@ -207,7 +206,6 @@ export function PropertiesPanel() {
                 type="checkbox"
                 checked={selectedObject.locked}
                 onChange={(e) => handlePropertyChange('locked', e.target.checked)}
-                className="w-4 h-4 rounded border-[#27272A] bg-[#0A0A0B] text-[#7C3AED] focus:ring-[#7C3AED] focus:ring-offset-0"
               />
               <span className="text-sm text-[#FAFAFA]">Locked</span>
             </label>
