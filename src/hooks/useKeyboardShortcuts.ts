@@ -354,14 +354,11 @@ export function useKeyboardShortcuts(setShowAddMenu?: (show: boolean) => void) {
         setTransformMode('scale');
       }
 
-      // Shading Modes (when not in edit mode): Z/X/C
-      else if (!isEditMode && e.key === 'z') {
+      // Shading Modes (when not in edit mode): Z = wireframe, C = material
+      // Note: X is used for delete (Blender standard), shading 'solid' available via toolbar
+      else if (!isEditMode && e.key === 'z' && !cmdOrCtrl) {
         e.preventDefault();
         useSceneStore.getState().setShadingMode('wireframe');
-      }
-      else if (!isEditMode && e.key === 'x') {
-        e.preventDefault();
-        useSceneStore.getState().setShadingMode('solid');
       }
       else if (!isEditMode && e.key === 'c') {
         e.preventDefault();
@@ -467,5 +464,5 @@ export function useKeyboardShortcuts(setShowAddMenu?: (show: boolean) => void) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedIds, executeCommand, undo, redo, setTransformMode, isPlaying, isPaused, activeAnimationId, animations, currentTime, isEditMode, selectionMode, enterEditMode, exitEditMode, setSelectionMode, autoKeyframe, playbackSpeed]);
+  }, [selectedIds, executeCommand, undo, redo, setTransformMode, isPlaying, isPaused, activeAnimationId, animations, currentTime, isEditMode, selectionMode, enterEditMode, exitEditMode, setSelectionMode, autoKeyframe, playbackSpeed, play, pause, stop, setCurrentTime, clearEditSelection, editingObjectId, selectedVertices, selectedEdges, selectedFaces]);
 }

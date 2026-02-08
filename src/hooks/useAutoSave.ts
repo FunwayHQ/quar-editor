@@ -56,5 +56,6 @@ export function useAutoSave({
     }, interval);
 
     return () => clearInterval(autoSaveInterval);
-  }, [project, interval]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- storage and setLastSaveTime are stable refs
+  }, [project, interval, onSaveSuccess, onSaveError]);
 }

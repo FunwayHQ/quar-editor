@@ -224,6 +224,12 @@ export const useMorphTargetStore = create<MorphTargetState>((set, get) => ({
   },
 
   clearShapeKeysForObject: (objectId) => {
+    // Dispose base pose geometry to prevent memory leak
+    const basePose = get().basePoses.get(objectId);
+    if (basePose) {
+      basePose.dispose();
+    }
+
     set(state => {
       const newMap = new Map(state.shapeKeysByObject);
       newMap.delete(objectId);

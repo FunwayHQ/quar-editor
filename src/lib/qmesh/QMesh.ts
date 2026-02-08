@@ -169,6 +169,15 @@ export class QMesh {
   faces: Map<string, QFace> = new Map();
   halfEdges: Map<string, QHalfEdge> = new Map();
 
+  // Monotonic counters to prevent ID collisions after deletions
+  private _vertexCounter = 0;
+  private _faceCounter = 0;
+  private _heCounter = 0;
+
+  nextVertexId(): string { return `v_${this._vertexCounter++}`; }
+  nextFaceId(): string { return `f_${this._faceCounter++}`; }
+  nextHalfEdgeId(): string { return `he_${this._heCounter++}`; }
+
   /**
    * Maps triangle index (in the compiled BufferGeometry) -> face ID
    * Critical for raycasting: when we hit a triangle, we need to know which QFace it belongs to
@@ -211,7 +220,7 @@ export class QMesh {
       let vertexId = positionToVertexId.get(key);
 
       if (!vertexId) {
-        vertexId = `v_${qMesh.vertices.size}`;
+        vertexId = qMesh.nextVertexId();
         const vertex = new QVertex(vertexId, new THREE.Vector3(x, y, z));
         qMesh.vertices.set(vertexId, vertex);
         positionToVertexId.set(key, vertexId);
@@ -299,8 +308,6 @@ export class QMesh {
     };
 
     // Step 4: Create faces (quads and standalone triangles)
-    let faceCounter = 0;
-    let heCounter = 0;
 
     for (let i = 0; i < triangles.length; i++) {
       if (triangles[i].used) continue;
@@ -320,7 +327,7 @@ export class QMesh {
         const quadVertices = this.orderQuadVertices(tri1.vertices, tri2.vertices);
 
         // Create a QFace for the quad
-        const faceId = `f_${faceCounter++}`;
+        const faceId = qMesh.nextFaceId();
         const face = new QFace(faceId);
         qMesh.faces.set(faceId, face);
 
@@ -330,7 +337,7 @@ export class QMesh {
           const fromVertex = quadVertices[j];
           const toVertex = quadVertices[(j + 1) % quadVertices.length];
 
-          const he = new QHalfEdge(`he_${heCounter++}`, toVertex);
+          const he = new QHalfEdge(qMesh.nextHalfEdgeId(), toVertex);
           he.face = face;
 
           // Link to vertex
@@ -354,7 +361,7 @@ export class QMesh {
         const tri = triangles[i];
         tri.used = true;
 
-        const faceId = `f_${faceCounter++}`;
+        const faceId = qMesh.nextFaceId();
         const face = new QFace(faceId);
         qMesh.faces.set(faceId, face);
 
@@ -364,7 +371,7 @@ export class QMesh {
           const fromVertex = tri.vertices[j];
           const toVertex = tri.vertices[(j + 1) % 3];
 
-          const he = new QHalfEdge(`he_${heCounter++}`, toVertex);
+          const he = new QHalfEdge(qMesh.nextHalfEdgeId(), toVertex);
           he.face = face;
 
           if (!fromVertex.oneOutgoingHalfEdge) {
@@ -553,14 +560,14 @@ export class QMesh {
       const newVertices: QVertex[] = [];
       vertices.forEach(oldVertex => {
         const newPos = oldVertex.position.clone().addScaledVector(normal, distance);
-        const newVertexId = `v_${this.vertices.size}`;
+        const newVertexId = this.nextVertexId();
         const newVertex = new QVertex(newVertexId, newPos);
         this.vertices.set(newVertexId, newVertex);
         newVertices.push(newVertex);
       });
 
       // Create the top face (extruded face)
-      const topFaceId = `f_${this.faces.size}`;
+      const topFaceId = this.nextFaceId();
       const topFace = new QFace(topFaceId);
       this.faces.set(topFaceId, topFace);
       newFaceIds.push(topFaceId);
@@ -571,7 +578,7 @@ export class QMesh {
         const fromVertex = newVertices[i];
         const toVertex = newVertices[(i + 1) % newVertices.length];
 
-        const heId = `he_${this.halfEdges.size}`;
+        const heId = this.nextHalfEdgeId();
         const he = new QHalfEdge(heId, toVertex);
         he.face = topFace;
         this.halfEdges.set(heId, he);
@@ -598,7 +605,7 @@ export class QMesh {
         const v3 = newVertices[i];
 
         // Create a quad face for the side
-        const sideFaceId = `f_${this.faces.size}`;
+        const sideFaceId = this.nextFaceId();
         const sideFace = new QFace(sideFaceId);
         this.faces.set(sideFaceId, sideFace);
         newFaceIds.push(sideFaceId);
@@ -611,7 +618,7 @@ export class QMesh {
           const fromVertex = sideVertices[j];
           const toVertex = sideVertices[(j + 1) % 4];
 
-          const heId = `he_${this.halfEdges.size}`;
+          const heId = this.nextHalfEdgeId();
           const he = new QHalfEdge(heId, toVertex);
           he.face = sideFace;
           this.halfEdges.set(heId, he);
@@ -764,7 +771,7 @@ export class QMesh {
 
       // Create new vertex at interpolated position
       const newPos = new THREE.Vector3().lerpVectors(v1.position, v2.position, position);
-      const newVertexId = `v_${this.vertices.size}`;
+      const newVertexId = this.nextVertexId();
       const newVertex = new QVertex(newVertexId, newPos);
       this.vertices.set(newVertexId, newVertex);
       newVertexIds.push(newVertexId);
@@ -832,18 +839,18 @@ export class QMesh {
       const bevelDir = new THREE.Vector3().crossVectors(edgeDir, avgNormal).normalize();
 
       // Create new vertices for bevel
-      const newV1Id = `v_${this.vertices.size}`;
+      const newV1Id = this.nextVertexId();
       const newV1Pos = v1.position.clone().add(bevelDir.clone().multiplyScalar(amount));
       const newV1 = new QVertex(newV1Id, newV1Pos);
       this.vertices.set(newV1Id, newV1);
 
-      const newV2Id = `v_${this.vertices.size}`;
+      const newV2Id = this.nextVertexId();
       const newV2Pos = v2.position.clone().add(bevelDir.clone().multiplyScalar(amount));
       const newV2 = new QVertex(newV2Id, newV2Pos);
       this.vertices.set(newV2Id, newV2);
 
       // Create bevel face (quad connecting original and new vertices)
-      const bevelFaceId = `f_${this.faces.size}`;
+      const bevelFaceId = this.nextFaceId();
       const bevelFace = new QFace(bevelFaceId);
       this.faces.set(bevelFaceId, bevelFace);
       newFaceIds.push(bevelFaceId);
@@ -856,7 +863,7 @@ export class QMesh {
         const fromVertex = bevelVertices[i];
         const toVertex = bevelVertices[(i + 1) % 4];
 
-        const heId = `he_${this.halfEdges.size}`;
+        const heId = this.nextHalfEdgeId();
         const bevelHE = new QHalfEdge(heId, toVertex);
         bevelHE.face = bevelFace;
         this.halfEdges.set(heId, bevelHE);
@@ -981,7 +988,7 @@ export class QMesh {
       ];
 
       // Create new merged face
-      const mergedFaceId = `f_${this.faces.size}`;
+      const mergedFaceId = this.nextFaceId();
       const mergedFace = new QFace(mergedFaceId);
       this.faces.set(mergedFaceId, mergedFace);
       mergedFaceIds.push(mergedFaceId);
@@ -992,7 +999,7 @@ export class QMesh {
         const fromVertex = allVertices[i];
         const toVertex = allVertices[(i + 1) % allVertices.length];
 
-        const heId = `he_${this.halfEdges.size}`;
+        const heId = this.nextHalfEdgeId();
         const mergedHE = new QHalfEdge(heId, toVertex);
         mergedHE.face = mergedFace;
         this.halfEdges.set(heId, mergedHE);
@@ -1072,14 +1079,14 @@ export class QMesh {
           relativePos.applyQuaternion(quaternion);
           const rotatedPos = relativePos.add(center);
 
-          const newVertexId = `v_${this.vertices.size}`;
+          const newVertexId = this.nextVertexId();
           const newVertex = new QVertex(newVertexId, rotatedPos);
           this.vertices.set(newVertexId, newVertex);
           rotatedVertices.push(newVertex);
         });
 
         // Create the rotated face
-        const newFaceId = `f_${this.faces.size}`;
+        const newFaceId = this.nextFaceId();
         const newFace = new QFace(newFaceId);
         this.faces.set(newFaceId, newFace);
         newFaceIds.push(newFaceId);
@@ -1090,7 +1097,7 @@ export class QMesh {
           const fromVertex = rotatedVertices[i];
           const toVertex = rotatedVertices[(i + 1) % rotatedVertices.length];
 
-          const heId = `he_${this.halfEdges.size}`;
+          const heId = this.nextHalfEdgeId();
           const newHE = new QHalfEdge(heId, toVertex);
           newHE.face = newFace;
           this.halfEdges.set(heId, newHE);
@@ -1253,7 +1260,7 @@ export class QMesh {
    * Create a new vertex on an edge by splitting it
    */
   private createVertexOnEdge(halfEdge: QHalfEdge, position: THREE.Vector3): string {
-    const newVertexId = `v_${this.vertices.size}`;
+    const newVertexId = this.nextVertexId();
     const newVertex = new QVertex(newVertexId, position);
     this.vertices.set(newVertexId, newVertex);
 
@@ -1380,8 +1387,8 @@ export class QMesh {
     const originalNormal = face.calculateNormal();
 
     // Create two new faces
-    const faceAId = `f_${this.faces.size}`;
-    const faceBId = `f_${this.faces.size + 1}`;
+    const faceAId = this.nextFaceId();
+    const faceBId = this.nextFaceId();
 
     this.createFaceFromVertices(faceAId, dedupA);
     this.createFaceFromVertices(faceBId, dedupB);
@@ -1416,14 +1423,13 @@ export class QMesh {
     this.faces.set(faceId, face);
 
     const newHalfEdges: QHalfEdge[] = [];
-    let heCounter = this.halfEdges.size;
 
     // Create half-edges around the face
     for (let i = 0; i < vertices.length; i++) {
       const fromVertex = vertices[i];
       const toVertex = vertices[(i + 1) % vertices.length];
 
-      const heId = `he_${heCounter++}`;
+      const heId = this.nextHalfEdgeId();
       const he = new QHalfEdge(heId, toVertex);
       he.face = face;
 

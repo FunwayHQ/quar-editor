@@ -113,11 +113,9 @@ export const useAppStore = create<AppState>()(
   )
 );
 
-// Monitor online/offline status at the module level
-if (typeof window !== 'undefined') {
-  const handleOnline = () => useAppStore.getState().setIsOffline(false);
-  const handleOffline = () => useAppStore.getState().setIsOffline(true);
-
-  window.addEventListener('online', handleOnline);
-  window.addEventListener('offline', handleOffline);
+// Monitor online/offline status at the module level (once only)
+if (typeof window !== 'undefined' && !(window as any).__quarOnlineListenersRegistered) {
+  (window as any).__quarOnlineListenersRegistered = true;
+  window.addEventListener('online', () => useAppStore.getState().setIsOffline(false));
+  window.addEventListener('offline', () => useAppStore.getState().setIsOffline(true));
 }

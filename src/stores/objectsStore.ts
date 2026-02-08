@@ -493,8 +493,10 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
     const newIds: string[] = [];
 
     objectsToDuplicate.forEach(obj => {
+      // Deep-clone geometry to avoid shared references between original and duplicate
+      const { renderGeometry, qMesh, ...rest } = obj;
       const duplicated: SceneObject = {
-        ...obj,
+        ...rest,
         id: generateId(),
         name: get().generateName(obj.type),
         position: [
@@ -506,6 +508,7 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
         children: [], // Don't copy children
         createdAt: Date.now(),
         modifiedAt: Date.now(),
+        ...(renderGeometry ? { renderGeometry: renderGeometry.clone() } : {}),
       };
 
       get().addObject(duplicated);

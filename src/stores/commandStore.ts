@@ -9,6 +9,8 @@ import { Command, CommandHistory } from '../lib/commands/Command';
 
 export interface CommandState {
   history: CommandHistory;
+  /** Incremented after each command execution to trigger re-renders */
+  version: number;
 
   // Execute a command and add to history
   executeCommand: (command: Command) => void;
@@ -29,26 +31,24 @@ export interface CommandState {
 
 export const useCommandStore = create<CommandState>((set, get) => ({
   history: new CommandHistory(),
+  version: 0,
 
   executeCommand: (command) => {
     const { history } = get();
     history.execute(command);
-    // Force new state object to trigger re-render
-    set((state) => ({ ...state }));
+    set((state) => ({ version: state.version + 1 }));
   },
 
   undo: () => {
     const { history } = get();
     history.undo();
-    // Force new state object to trigger re-render
-    set((state) => ({ ...state }));
+    set((state) => ({ version: state.version + 1 }));
   },
 
   redo: () => {
     const { history } = get();
     history.redo();
-    // Force new state object to trigger re-render
-    set((state) => ({ ...state }));
+    set((state) => ({ version: state.version + 1 }));
   },
 
   canUndo: () => {
@@ -70,7 +70,6 @@ export const useCommandStore = create<CommandState>((set, get) => ({
   clearHistory: () => {
     const { history } = get();
     history.clear();
-    // Force new state object to trigger re-render
-    set((state) => ({ ...state }));
+    set({ version: 0 });
   },
 }));
