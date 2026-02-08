@@ -744,9 +744,11 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
         // Log that we're saving modified geometry
         console.log(`[objectsStore] Saving modified geometry for ${obj.name}, vertices: ${geometryData.attributes.position?.array.length / 3}`);
 
-        // Return object with updated geometry data
+        // Return object with updated geometry data, excluding non-serializable properties
+        // (renderGeometry is a THREE.BufferGeometry, qMesh is a class instance — neither survives JSON.stringify)
+        const { renderGeometry: _rg, qMesh: _qm, ...serializableObj } = obj;
         return {
-          ...obj,
+          ...serializableObj,
           importedGeometry: {
             ...obj.importedGeometry,
             data: geometryData,
@@ -754,8 +756,9 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
         };
       }
 
-      // Return object as-is if no mesh in registry
-      return obj;
+      // Return object without non-serializable properties
+      const { renderGeometry: _rg, qMesh: _qm, ...serializableObj } = obj;
+      return serializableObj;
     });
 
     console.log(`[objectsStore] Serializing ${objects.length} objects`);
@@ -774,11 +777,10 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
       const newObjects = new Map<string, SceneObject>();
 
       data.forEach((obj: any) => {
-        // Log if object has saved geometry data
-        if (obj.geometry?.data) {
-          console.log(`[objectsStore] Object ${obj.name} has saved geometry data (${obj.geometry.data.attributes?.position?.array.length / 3} vertices)`);
-        }
-        newObjects.set(obj.id, obj);
+        // Strip non-serializable properties that may exist from old saves
+        // (renderGeometry/qMesh are class instances that don't survive JSON round-trip)
+        const { renderGeometry: _rg, qMesh: _qm, ...cleanObj } = obj;
+        newObjects.set(cleanObj.id, cleanObj);
       });
 
       return { objects: newObjects };

@@ -1161,16 +1161,24 @@ export class QMesh {
       return { newFaceIds: [] };
     }
 
-    console.log(`[QMesh] Splitting face ${faceId} (${vertices.length} vertices)`);
-
     // Step 1: Find which edges the cut points lie on
     const cut1Info = this.findCutPointOnFace(face, cutPoint1);
     const cut2Info = this.findCutPointOnFace(face, cutPoint2);
 
     if (!cut1Info || !cut2Info) {
-      console.warn(`[QMesh] Cut points not on face edges`);
+      console.warn(`[QMesh] Cut points not on face edges. cut1Info=${!!cut1Info}, cut2Info=${!!cut2Info}`);
       return { newFaceIds: [] };
     }
+
+    if (cut1Info.edgeIndex === cut2Info.edgeIndex) {
+      console.warn(`[QMesh] Both cuts on same edge index ${cut1Info.edgeIndex} — cannot split`);
+      return { newFaceIds: [] };
+    }
+
+    // IMPORTANT: Save the vertex list BEFORE creating new vertices.
+    // createVertexOnEdge modifies twin half-edges' toVertex, which corrupts
+    // face.getVertices() results (it uses twin.toVertex to get "from" vertex).
+    const savedVertices = [...vertices];
 
     // Step 2: Create new vertices at cut points (if not on existing vertices)
     const cut1VertexId = cut1Info.onVertex
@@ -1187,13 +1195,13 @@ export class QMesh {
       cut1VertexId,
       cut2VertexId,
       cut1Info.edgeIndex!,
-      cut2Info.edgeIndex!
+      cut2Info.edgeIndex!,
+      savedVertices
     );
 
     // Step 4: Update topology
     this.linkTwins();
 
-    console.log(`[QMesh] Split face ${faceId} → created ${newFaceIds.length} new faces`);
     return { newFaceIds };
   }
 
@@ -1279,10 +1287,8 @@ export class QMesh {
 
       this.halfEdges.set(newHEId, newHE);
 
-      console.log(`[QMesh] Split adjacent face edge: inserted ${newVertexId} into face ${twinHE.face.id}`);
     }
 
-    console.log(`[QMesh] Created vertex ${newVertexId} on edge`);
     return newVertexId;
   }
 
@@ -1295,15 +1301,15 @@ export class QMesh {
     cut1VertexId: string,
     cut2VertexId: string,
     edge1Index: number,
-    edge2Index: number
+    edge2Index: number,
+    savedVertices?: QVertex[]
   ): string[] {
     const face = this.faces.get(faceId);
     if (!face) return [];
 
-    const vertices = face.getVertices();
+    // Use saved vertices if provided (avoids twin.toVertex corruption from createVertexOnEdge)
+    const vertices = savedVertices || face.getVertices();
     const halfEdges = face.getHalfEdges();
-
-    console.log(`[QMesh] Splitting face with ${vertices.length} vertices, cut on edges ${edge1Index} and ${edge2Index}`);
 
     // Get cut vertices
     const cut1Vertex = this.vertices.get(cut1VertexId)!;
@@ -1370,13 +1376,8 @@ export class QMesh {
     this.faces.delete(faceId);
     halfEdges.forEach(he => this.halfEdges.delete(he.id));
 
-    // Debug: Log vertex orders
-    console.log(`[QMesh] Face A vertices:`, dedupA.map(v => v.id).join(' → '));
-    console.log(`[QMesh] Face B vertices:`, dedupB.map(v => v.id).join(' → '));
-
     // Check face A winding order matches original
     const originalNormal = face.calculateNormal();
-    console.log(`[QMesh] Original face normal:`, originalNormal.toArray());
 
     // Create two new faces
     const faceAId = `f_${this.faces.size}`;
@@ -1391,25 +1392,18 @@ export class QMesh {
     const normalA = faceA.calculateNormal();
     const normalB = faceB.calculateNormal();
 
-    console.log(`[QMesh] Face A normal:`, normalA.toArray(), '(dot with original:', normalA.dot(originalNormal), ')');
-    console.log(`[QMesh] Face B normal:`, normalB.toArray(), '(dot with original:', normalB.dot(originalNormal), ')');
-
     // If normal is flipped (dot product < 0), reverse the vertex order!
     if (normalA.dot(originalNormal) < 0) {
-      console.warn(`[QMesh] Face A has inverted normal! Reversing vertices...`);
       const reversedA = [...dedupA].reverse();
       this.faces.delete(faceAId);
       this.createFaceFromVertices(faceAId, reversedA);
     }
 
     if (normalB.dot(originalNormal) < 0) {
-      console.warn(`[QMesh] Face B has inverted normal! Reversing vertices...`);
       const reversedB = [...dedupB].reverse();
       this.faces.delete(faceBId);
       this.createFaceFromVertices(faceBId, reversedB);
     }
-
-    console.log(`[QMesh] Split complete: ${faceAId} (${dedupA.length} verts), ${faceBId} (${dedupB.length} verts)`);
 
     return [faceAId, faceBId];
   }
