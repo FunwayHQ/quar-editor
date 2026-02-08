@@ -569,7 +569,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
               }
             }
 
-            if (bestSnapPoint && bestDist < 0.5) {
+            if (bestSnapPoint && bestDist < 1.5) {
               snapPoint = bestSnapPoint;
               console.log('[KnifeTool] Snapped to QMesh edge, dist:', bestDist.toFixed(3));
             } else {
@@ -586,7 +586,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             intersection.point,
             meshRef.current.geometry,
             meshRef.current,
-            0.5
+            1.5
           );
 
           if (nearbyEdge) {

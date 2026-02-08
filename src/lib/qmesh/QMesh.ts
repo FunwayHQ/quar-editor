@@ -1153,11 +1153,11 @@ export class QMesh {
     faceId: string,
     cutPoint1: THREE.Vector3,
     cutPoint2: THREE.Vector3
-  ): { newFaceIds: string[] } {
+  ): { newFaceIds: string[]; error?: string } {
     const face = this.faces.get(faceId);
     if (!face) {
       console.warn(`[QMesh] Face ${faceId} not found`);
-      return { newFaceIds: [] };
+      return { newFaceIds: [], error: 'Face not found' };
     }
 
     const vertices = face.getVertices();
@@ -1165,7 +1165,7 @@ export class QMesh {
 
     if (vertices.length < 3) {
       console.warn(`[QMesh] Face ${faceId} has < 3 vertices, cannot split`);
-      return { newFaceIds: [] };
+      return { newFaceIds: [], error: 'Face has fewer than 3 vertices' };
     }
 
     // Step 1: Find which edges the cut points lie on
@@ -1174,12 +1174,12 @@ export class QMesh {
 
     if (!cut1Info || !cut2Info) {
       console.warn(`[QMesh] Cut points not on face edges. cut1Info=${!!cut1Info}, cut2Info=${!!cut2Info}`);
-      return { newFaceIds: [] };
+      return { newFaceIds: [], error: 'Cut points must be on face edges' };
     }
 
     if (cut1Info.edgeIndex === cut2Info.edgeIndex) {
       console.warn(`[QMesh] Both cuts on same edge index ${cut1Info.edgeIndex} — cannot split`);
-      return { newFaceIds: [] };
+      return { newFaceIds: [], error: 'Both cut points are on the same edge. Place them on different edges.' };
     }
 
     // IMPORTANT: Save the vertex list BEFORE creating new vertices.
@@ -1218,7 +1218,7 @@ export class QMesh {
   private findCutPointOnFace(
     face: QFace,
     cutPoint: THREE.Vector3,
-    tolerance: number = 0.05
+    tolerance: number = 0.1
   ): { onVertex?: QVertex; edge?: QHalfEdge; edgeIndex?: number } | null {
     const vertices = face.getVertices();
     const halfEdges = face.getHalfEdges();

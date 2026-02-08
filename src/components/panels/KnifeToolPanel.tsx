@@ -12,6 +12,7 @@ import { useEditModeStore } from '../../stores/editModeStore';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
 import { MeshOperations } from '../../lib/mesh/MeshOperations';
 import { useObjectsStore } from '../../stores/objectsStore';
+import { useToastStore } from '../../stores/toastStore';
 
 const { incrementGeometryVersion } = useEditModeStore.getState();
 
@@ -99,11 +100,14 @@ export function KnifeToolPanel() {
         deactivateTool();
       } else {
         console.warn('[KnifeTool] Cut failed - no new faces created');
-        alert('Cut failed. Make sure the cut line crosses the face.');
+        const message = result.error || 'Cut failed. Make sure the cut line crosses different edges.';
+        useToastStore.getState().warning(message);
+        cancelCut();
       }
     } catch (error) {
       console.error('[KnifeTool] Cut failed:', error);
-      alert(`Cut failed: ${error}`);
+      useToastStore.getState().error(`Cut failed: ${error}`);
+      cancelCut();
     }
   };
 

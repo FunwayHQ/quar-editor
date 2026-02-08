@@ -938,20 +938,22 @@ export class MeshOperations {
     faceId: string,
     cutPoint1: THREE.Vector3,
     cutPoint2: THREE.Vector3
-  ): { newFaceIds: string[] } {
+  ): { newFaceIds: string[]; error?: string } {
     const objectsStore = useObjectsStore.getState();
     const sceneObject = objectsStore.getObject(objectId);
 
     if (!sceneObject || !sceneObject.qMesh) {
       console.warn('[MeshOperations] Object or qMesh not found');
-      return { newFaceIds: [] };
+      return { newFaceIds: [], error: 'Object or mesh not found' };
     }
 
     const qMesh = sceneObject.qMesh;
     const result = qMesh.splitFace(faceId, cutPoint1, cutPoint2);
 
-    // Update geometry in store
-    objectsStore.updateObjectGeometry(objectId, qMesh);
+    if (result.newFaceIds.length > 0) {
+      // Only update geometry if cut was successful
+      objectsStore.updateObjectGeometry(objectId, qMesh);
+    }
 
     console.log(`[MeshOperations] Knife cut on face ${faceId}: created ${result.newFaceIds.length} new faces`);
     return result;

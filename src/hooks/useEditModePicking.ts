@@ -103,7 +103,7 @@ export function useEditModePicking() {
         });
 
         // Only select if within threshold
-        if (closestEdge && closestDistance < 0.1) {
+        if (closestEdge && closestDistance < 0.2) {
           toggleEdgeSelection(closestEdge.v1.id, closestEdge.v2.id, multiSelect);
         }
         break;
