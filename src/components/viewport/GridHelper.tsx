@@ -21,7 +21,7 @@ export function GridHelper({ size = 10, divisions = 10 }: GridHelperProps) {
     // Make grid lines semitransparent
     const material = gridRef.current.material as THREE.LineBasicMaterial;
     if (material) {
-      material.opacity = 0.3;
+      material.opacity = 0.5;
       material.transparent = true;
       material.depthWrite = false; // Prevent z-fighting
     }

@@ -101,7 +101,7 @@ export const useSceneStore = create<SceneState>((set) => ({
   gridColor: '#7C3AED',              // Purple accent
   setGridColor: (color) => set({ gridColor: color }),
 
-  gridOpacity: 0.15,                 // 15% opacity for plane
+  gridOpacity: 0,                    // 0% opacity for plane (invisible fill)
   setGridOpacity: (opacity) => set({ gridOpacity: opacity }),
 
   // Stats

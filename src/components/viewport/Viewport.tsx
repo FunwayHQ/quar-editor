@@ -96,12 +96,18 @@ function Scene() {
 
   // Memoize grid helper to prevent recreation every render
   const gridHelper = useMemo(() => {
-    return new THREE.GridHelper(
+    const grid = new THREE.GridHelper(
       gridSize * gridUnitSize,  // Total size in meters
       gridDivisions,            // Number of divisions
       gridColor,                // Center line color
       gridColor                 // Grid line color
     );
+    // Make grid lines 50% transparent
+    const mat = grid.material as THREE.LineBasicMaterial;
+    mat.transparent = true;
+    mat.opacity = 0.5;
+    mat.depthWrite = false;
+    return grid;
   }, [gridSize, gridUnitSize, gridDivisions, gridColor]);
 
   // Memoize axes helper
