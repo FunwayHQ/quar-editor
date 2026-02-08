@@ -82,12 +82,14 @@ function Scene() {
   // Camera preset hook
   const { applyPreset } = useCameraPresets();
 
-  // Apply camera preset when it changes
+  // Apply camera preset when it changes, then clear it so orbiting works freely
+  const setCameraPreset = useSceneStore((state) => state.setCameraPreset);
   useEffect(() => {
     if (cameraPreset) {
       applyPreset(cameraPreset);
+      setCameraPreset(null);
     }
-  }, [cameraPreset, applyPreset]);
+  }, [cameraPreset, applyPreset, setCameraPreset]);
 
   // Handle background click to deselect
   const handleBackgroundClick = useCallback(() => {
