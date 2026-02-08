@@ -15,6 +15,7 @@ import { useObjectsStore } from '@/stores/objectsStore';
 import { useEnvironmentStore } from '@/stores/environmentStore';
 import { useEditModeStore } from '@/stores/editModeStore';
 import { useCurveStore } from '@/stores/curveStore';
+import { useContextMenuStore } from '@/stores/contextMenuStore';
 import { ViewportToolbar } from './ViewportToolbar';
 import { StatsPanel, FPSCounter } from './StatsPanel';
 import { ObjectCreationToolbar } from './ObjectCreationToolbar';
@@ -240,9 +241,10 @@ function Scene() {
 export function Viewport() {
   const { showStats } = useSceneStore();
   const { isEditMode } = useEditModeStore();
-  const { clearSelection } = useObjectsStore();
+  const { clearSelection, selectedIds } = useObjectsStore();
   const { clearSelection: clearEditSelection } = useEditModeStore();
   const { clearSelection: clearCurveSelection } = useCurveStore();
+  const showContextMenu = useContextMenuStore((state) => state.showContextMenu);
 
   const handleBackgroundClick = () => {
     if (isEditMode) {
@@ -254,7 +256,14 @@ export function Viewport() {
   };
 
   return (
-    <div className="relative w-full h-full bg-background">
+    <div
+      className="relative w-full h-full bg-background"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const context = selectedIds.length > 0 ? 'viewport-object' : 'viewport-empty';
+        showContextMenu(e.clientX, e.clientY, context);
+      }}
+    >
       {/* Object Creation Toolbar (hide in edit mode) - moved closer to top */}
       {!isEditMode && <ObjectCreationToolbar />}
 

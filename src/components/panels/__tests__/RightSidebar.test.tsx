@@ -62,7 +62,7 @@ describe('RightSidebar - Environment Tab Integration', () => {
 
       const tabs = screen.getAllByRole('button');
       const propertiesTab = tabs[0]; // First tab is Properties
-      expect(propertiesTab).toHaveClass('bg-[#7C3AED]');
+      expect(propertiesTab).toHaveClass('border-[#7C3AED]');
     });
 
     it('should have all expected tabs', () => {
@@ -85,7 +85,7 @@ describe('RightSidebar - Environment Tab Integration', () => {
       const materialTab = tabs[1]; // Second tab is Material
       fireEvent.click(materialTab);
 
-      expect(materialTab).toHaveClass('bg-[#7C3AED]');
+      expect(materialTab).toHaveClass('border-[#7C3AED]');
     });
 
     it('should switch to Environment tab when clicked', () => {
@@ -95,7 +95,7 @@ describe('RightSidebar - Environment Tab Integration', () => {
       const environmentTab = tabs[2]; // Third tab is Environment
       fireEvent.click(environmentTab);
 
-      expect(environmentTab).toHaveClass('bg-[#7C3AED]');
+      expect(environmentTab).toHaveClass('border-[#7C3AED]');
     });
 
     it('should show Environment panel when Environment tab is active', () => {
@@ -123,13 +123,13 @@ describe('RightSidebar - Environment Tab Integration', () => {
   });
 
   describe('Tab Styling', () => {
-    it('should highlight active tab with purple background', () => {
+    it('should highlight active tab with purple border', () => {
       render(<RightSidebar />);
 
       const tabs = screen.getAllByRole('button');
       const propertiesTab = tabs[0];
-      expect(propertiesTab).toHaveClass('bg-[#7C3AED]');
-      expect(propertiesTab).toHaveClass('text-white');
+      expect(propertiesTab).toHaveClass('border-[#7C3AED]');
+      expect(propertiesTab).toHaveClass('text-[#FAFAFA]');
     });
 
     it('should show inactive tabs with gray text', () => {
@@ -156,8 +156,8 @@ describe('RightSidebar - Environment Tab Integration', () => {
       fireEvent.click(environmentTab);
 
       // After click - active
-      expect(environmentTab).toHaveClass('bg-[#7C3AED]');
-      expect(environmentTab).toHaveClass('text-white');
+      expect(environmentTab).toHaveClass('border-[#7C3AED]');
+      expect(environmentTab).toHaveClass('text-[#FAFAFA]');
     });
   });
 

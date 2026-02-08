@@ -24,6 +24,7 @@ import { useObjectsStore, SceneObject } from '../../stores/objectsStore';
 import { useCommandStore } from '../../stores/commandStore';
 import { useEditModeStore } from '../../stores/editModeStore';
 import { useCurveStore } from '../../stores/curveStore';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { DeleteObjectsCommand, DuplicateObjectsCommand, UpdateObjectCommand } from '../../lib/commands/ObjectCommands';
 import { GroupObjectsCommand, UngroupObjectsCommand } from '../../lib/commands/GroupCommands';
 import { CurvePanel } from './CurvePanel';
@@ -43,6 +44,7 @@ function ObjectTreeItem({ object, isSelected, onSelect, depth }: ObjectTreeItemP
   const getChildren = useObjectsStore((state) => state.getChildren);
   const executeCommand = useCommandStore((state) => state.executeCommand);
   const selectedIds = useObjectsStore((state) => state.selectedIds);
+  const showContextMenu = useContextMenuStore((state) => state.showContextMenu);
 
   const children = getChildren(object.id);
   const hasChildren = children.length > 0;
@@ -99,6 +101,12 @@ function ObjectTreeItem({ object, isSelected, onSelect, depth }: ObjectTreeItemP
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={handleSelect}
         onDoubleClick={handleDoubleClick}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelect(object.id, false);
+          showContextMenu(e.clientX, e.clientY, 'hierarchy', object.id);
+        }}
       >
         {/* Expand/Collapse */}
         {hasChildren ? (
@@ -183,6 +191,7 @@ export function HierarchyPanel() {
   const clearCurveSelection = useCurveStore((state) => state.clearSelection);
   const executeCommand = useCommandStore((state) => state.executeCommand);
   const { enterEditMode } = useEditModeStore();
+  const showContextMenu = useContextMenuStore((state) => state.showContextMenu);
 
   // Filter to show only root-level objects (no parent)
   const rootObjects = objects.filter((obj) => obj.parentId === null);
@@ -264,7 +273,7 @@ export function HierarchyPanel() {
         <>
           {/* Header */}
           <div className="flex items-center justify-between p-3 border-b border-[#27272A]">
-            <h2 className="text-sm font-medium text-[#FAFAFA]">Scene</h2>
+            <h2 className="section-label">Scene</h2>
             <div className="flex items-center gap-1">
           <button
             onClick={handleGroup}
@@ -311,11 +320,17 @@ export function HierarchyPanel() {
 
           {/* Object Tree */}
           <div
-            className="flex-1 overflow-y-auto"
+            className="flex-1 overflow-y-auto auto-scrollbar"
             onClick={(e) => {
               // Deselect when clicking empty space
               if (e.target === e.currentTarget) {
                 clearObjectSelection();
+              }
+            }}
+            onContextMenu={(e) => {
+              if (e.target === e.currentTarget) {
+                e.preventDefault();
+                showContextMenu(e.clientX, e.clientY, 'hierarchy-empty');
               }
             }}
           >

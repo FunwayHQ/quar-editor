@@ -76,8 +76,8 @@ export function RightSidebar() {
             disabled={isEditMode}
             className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
               activeTab === 'properties'
-                ? 'bg-[#7C3AED] text-white'
-                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+                ? 'border-t-2 border-[#7C3AED] bg-[#7C3AED]/10 text-[#FAFAFA]'
+                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222225] border-t-2 border-transparent'
             } ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <Settings className="w-4 h-4" />
@@ -88,8 +88,8 @@ export function RightSidebar() {
             disabled={isEditMode}
             className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
               activeTab === 'material'
-                ? 'bg-[#7C3AED] text-white'
-                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+                ? 'border-t-2 border-[#7C3AED] bg-[#7C3AED]/10 text-[#FAFAFA]'
+                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222225] border-t-2 border-transparent'
             } ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <Palette className="w-4 h-4" />
@@ -100,8 +100,8 @@ export function RightSidebar() {
             disabled={isEditMode}
             className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
               activeTab === 'environment'
-                ? 'bg-[#7C3AED] text-white'
-                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+                ? 'border-t-2 border-[#7C3AED] bg-[#7C3AED]/10 text-[#FAFAFA]'
+                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222225] border-t-2 border-transparent'
             } ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <Cloud className="w-4 h-4" />
@@ -111,8 +111,8 @@ export function RightSidebar() {
             onClick={() => setActiveTab('shapekeys')}
             className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
               activeTab === 'shapekeys'
-                ? 'bg-[#7C3AED] text-white'
-                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+                ? 'border-t-2 border-[#7C3AED] bg-[#7C3AED]/10 text-[#FAFAFA]'
+                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222225] border-t-2 border-transparent'
             }`}
           >
             <Layers3 className="w-4 h-4" />
@@ -122,8 +122,8 @@ export function RightSidebar() {
             onClick={() => setActiveTab('modifiers')}
             className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
               activeTab === 'modifiers'
-                ? 'bg-[#7C3AED] text-white'
-                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+                ? 'border-t-2 border-[#7C3AED] bg-[#7C3AED]/10 text-[#FAFAFA]'
+                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222225] border-t-2 border-transparent'
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -134,8 +134,8 @@ export function RightSidebar() {
             disabled={isEditMode}
             className={`px-4 py-3 flex items-center justify-center gap-1.5 text-xs transition-colors whitespace-nowrap ${
               activeTab === 'curves'
-                ? 'bg-[#7C3AED] text-white'
-                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#27272A]'
+                ? 'border-t-2 border-[#7C3AED] bg-[#7C3AED]/10 text-[#FAFAFA]'
+                : 'text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222225] border-t-2 border-transparent'
             } ${isEditMode ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <Spline className="w-4 h-4" />
@@ -158,7 +158,7 @@ export function RightSidebar() {
       </div>
 
       {/* Panel Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto auto-scrollbar">
         {activeTab === 'edit' && <EditModePanel />}
         {activeTab === 'properties' && <PropertiesPanel />}
         {activeTab === 'material' && <MaterialPanel />}

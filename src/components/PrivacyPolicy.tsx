@@ -142,7 +142,7 @@ export function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
               <p>
                 For questions about this privacy policy, please open an issue on our{' '}
                 <a
-                  href="https://github.com/quarteam/quar-editor"
+                  href="https://github.com/FunwayHQ/quar-editor"
                   className="text-purple-400 hover:text-purple-300 underline underline-offset-2"
                   target="_blank"
                   rel="noopener noreferrer"

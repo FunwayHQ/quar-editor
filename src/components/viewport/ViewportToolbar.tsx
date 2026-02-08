@@ -52,10 +52,10 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
               <button
                 key={mode}
                 onClick={() => setTransformMode(mode)}
-                className={`p-2 rounded transition-all ${
+                className={`p-2 rounded transition-all active:scale-95 ${
                   transformMode === mode
-                    ? 'bg-accent text-white'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-panel'
+                    ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-2'
                 }`}
                 title={`${label} (${shortcut})`}
               >
@@ -74,10 +74,10 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
           <button
             key={mode}
             onClick={() => setShadingMode(mode)}
-            className={`p-2 rounded transition-all ${
+            className={`p-2 rounded transition-all active:scale-95 ${
               shadingMode === mode
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-panel'
+                ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+                : 'text-text-secondary hover:text-text-primary hover:bg-surface-2'
             }`}
             title={`${label} (${shortcut})`}
           >
@@ -96,10 +96,10 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
       {/* Toggle Grid */}
       <button
         onClick={() => setShowGrid(!showGrid)}
-        className={`p-2 rounded transition-all ${
+        className={`p-2 rounded transition-all active:scale-95 ${
           showGrid
-            ? 'bg-accent text-white'
-            : 'text-text-secondary hover:text-text-primary hover:bg-panel'
+            ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+            : 'text-text-secondary hover:text-text-primary hover:bg-surface-2'
         }`}
         title="Toggle Grid"
       >
@@ -109,10 +109,10 @@ export function ViewportToolbar({ embedded = false }: ViewportToolbarProps) {
       {/* Toggle Axes */}
       <button
         onClick={() => setShowAxes(!showAxes)}
-        className={`p-2 rounded transition-all ${
+        className={`p-2 rounded transition-all active:scale-95 ${
           showAxes
-            ? 'bg-accent text-white'
-            : 'text-text-secondary hover:text-text-primary hover:bg-panel'
+            ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+            : 'text-text-secondary hover:text-text-primary hover:bg-surface-2'
         }`}
         title="Toggle Axes"
       >

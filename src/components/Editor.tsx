@@ -11,6 +11,8 @@ import { ArrowLeft, Save, Download, FileDown } from 'lucide-react';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
 import { useAppStore } from '../stores/appStore';
 import { useToastStore } from '../stores/toastStore';
+import { useSceneStore } from '../stores/sceneStore';
+import { useObjectsStore } from '../stores/objectsStore';
 import { serializeScene } from '../services/sceneSerializer';
 import { useLoadProject } from '../hooks/useLoadProject';
 import { useAutoSave } from '../hooks/useAutoSave';
@@ -24,6 +26,7 @@ import { AdvancedOperationsPanel } from './panels/AdvancedOperationsPanel';
 import { KnifeToolPanel } from './panels/KnifeToolPanel';
 import { ViewportToolbar } from './viewport/ViewportToolbar';
 import { AddMenu } from './modals/AddMenu';
+import { ContextMenu } from './ContextMenu';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useAnimationKeyframes } from '../hooks/useAnimationKeyframes';
 import { useEditModeStore } from '../stores/editModeStore';
@@ -34,12 +37,16 @@ export function Editor() {
   const navigate = useNavigate();
   // Use selectors to subscribe only to needed state
   const setLastSaveTime = useAppStore((state) => state.setLastSaveTime);
+  const lastSaveTime = useAppStore((state) => state.lastSaveTime);
   const isOffline = useAppStore((state) => state.isOffline);
   const { success, error: showError } = useToastStore();
+  const stats = useSceneStore((state) => state.stats);
+  const objectCount = useObjectsStore((state) => state.getAllObjects().length);
   const [project, setProject] = useState<ProjectData | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const { isEditMode } = useEditModeStore();
   const { isActive: isKnifeActive } = useKnifeToolStore();
 
@@ -77,10 +84,19 @@ export function Editor() {
     },
   });
 
+  // Determine save state
+  const getSaveState = (): 'saved' | 'unsaved' | 'saving' => {
+    if (isSaving) return 'saving';
+    if (!lastSaveTime) return 'unsaved';
+    if (project && new Date(project.lastModified) > lastSaveTime) return 'unsaved';
+    return 'saved';
+  };
+
   async function saveProject() {
     if (!project) return;
 
     try {
+      setIsSaving(true);
       const sceneData = serializeScene();
 
       const updatedProject = {
@@ -97,6 +113,8 @@ export function Editor() {
     } catch (err) {
       console.error('Failed to save project:', err);
       showError('Failed to save project. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -143,27 +161,31 @@ export function Editor() {
     return null;
   }
 
+  const saveState = getSaveState();
+
   return (
     <div className="h-screen bg-background flex flex-col">
       {/* Top Toolbar - Three column grid for perfect centering */}
-      <header className="border-b border-border p-3 grid grid-cols-3 items-center">
+      <header className="p-2 grid grid-cols-3 items-center shadow-header-glow" style={{ borderBottom: '1px solid rgba(39,39,42,0.6)' }}>
         {/* Left Column */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/')}
             className="btn-ghost p-2"
             title="Back to projects"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <img src="/logo-dark.svg" alt="QUAR Editor" className="h-10" />
+          <img src="/logo-dark.svg" alt="QUAR Editor" className="h-8" />
+
+          <div className="w-px h-5 bg-border/50" />
 
           <input
             type="text"
             value={project.name}
             onChange={(e) => setProject({ ...project, name: e.target.value })}
-            className="input bg-transparent border-none text-lg font-semibold focus:ring-0 px-2"
+            className="input bg-transparent border-none text-sm font-semibold focus:ring-0 px-2"
             title="Click to rename project"
             style={{ width: `${project.name.length + 2}ch` }}
           />
@@ -180,21 +202,33 @@ export function Editor() {
           {!isEditMode && <ViewportToolbar embedded={true} />}
         </div>
 
-        {/* Right Column */}
-        <div className="flex items-center gap-2 justify-end">
-          <button onClick={saveProject} className="btn-secondary flex items-center gap-2" title="Save project">
+        {/* Right Column - Icon-only buttons with tooltips */}
+        <div className="flex items-center gap-1.5 justify-end">
+          <button
+            onClick={saveProject}
+            className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-sm"
+            title="Save project (Ctrl+S)"
+          >
             <Save className="w-4 h-4" />
-            Save
+            <span className="hidden xl:inline">Save</span>
           </button>
 
-          <button onClick={() => setShowExportDialog(true)} className="btn-secondary flex items-center gap-2" title="Export scene">
+          <button
+            onClick={() => setShowExportDialog(true)}
+            className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-sm"
+            title="Export scene"
+          >
             <FileDown className="w-4 h-4" />
-            Export
+            <span className="hidden xl:inline">Export</span>
           </button>
 
-          <button onClick={downloadQuar} className="btn-ghost flex items-center gap-2" title="Download .quar file">
+          <button
+            onClick={downloadQuar}
+            className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-sm"
+            title="Download .quar file"
+          >
             <Download className="w-4 h-4" />
-            Download .quar
+            <span className="hidden xl:inline">.quar</span>
           </button>
         </div>
       </header>
@@ -204,6 +238,9 @@ export function Editor() {
 
       {/* Sprint Y: Add Menu (Shift+A) */}
       <AddMenu isOpen={showAddMenu} onClose={() => setShowAddMenu(false)} />
+
+      {/* Context Menu (global) */}
+      <ContextMenu />
 
       {/* Main Editor Area */}
       <main className="flex-1 relative flex flex-col overflow-hidden">
@@ -229,9 +266,20 @@ export function Editor() {
       </main>
 
       {/* Status Bar */}
-      <footer className="border-t border-border p-2 flex items-center justify-between text-xs text-text-secondary">
-        <span>Project ID: {project.id.slice(0, 8)}...</span>
-        <span>Last modified: {new Date(project.lastModified).toLocaleTimeString()}</span>
+      <footer className="border-t border-border/60 px-3 py-1 flex items-center justify-between text-[11px] text-text-tertiary font-mono">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className="save-dot" data-state={saveState} title={saveState === 'saved' ? 'All changes saved' : saveState === 'saving' ? 'Saving...' : 'Unsaved changes'} />
+            <span>{saveState === 'saved' ? 'Saved' : saveState === 'saving' ? 'Saving...' : 'Unsaved'}</span>
+          </div>
+          <span className="text-border">|</span>
+          <span>{objectCount} objects</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span>{stats.vertices.toLocaleString()} verts</span>
+          <span>{stats.triangles.toLocaleString()} tris</span>
+          <span>{stats.memory > 0 ? `${stats.memory.toFixed(1)} MB` : ''}</span>
+        </div>
       </footer>
     </div>
   );

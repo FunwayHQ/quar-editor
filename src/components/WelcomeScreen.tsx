@@ -176,12 +176,21 @@ export function WelcomeScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative overflow-hidden">
+      {/* Subtle radial gradient background */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.08) 0%, transparent 60%)',
+        }}
+      />
+
       {/* Header */}
-      <header className="border-b border-border p-6">
+      <header className="border-b border-border p-6 relative z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <img src="/logo-dark.svg" alt="QUAR Editor" className="h-12" />
+            <span className="text-[10px] font-mono text-text-tertiary bg-surface-2 px-2 py-0.5 rounded-full border border-border/50">v0.1.0</span>
             {isOffline && (
               <span className="text-sm text-text-secondary px-2 py-1 bg-panel rounded">
                 Offline Mode
@@ -192,9 +201,9 @@ export function WelcomeScreen() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full p-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full p-8 relative z-10">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2">Your Projects</h2>
+          <h2 className="text-3xl font-heading font-bold mb-2">Your Projects</h2>
           <p className="text-text-secondary">
             All projects are stored locally on your device
           </p>
@@ -204,14 +213,14 @@ export function WelcomeScreen() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <button
             onClick={createNewProject}
-            className="glass p-6 hover:bg-opacity-90 transition-all flex flex-col items-center justify-center gap-3 min-h-[200px] group"
+            className="glass p-6 hover:shadow-glow-sm transition-all flex flex-col items-center justify-center gap-3 min-h-[200px] group"
           >
             <Plus className="w-12 h-12 text-accent group-hover:scale-110 transition-transform" />
-            <span className="font-medium">New Project</span>
+            <span className="font-medium font-heading">New Project</span>
             <span className="text-sm text-text-secondary">Start from scratch</span>
           </button>
 
-          <label className="glass p-6 hover:bg-opacity-90 transition-all flex flex-col items-center justify-center gap-3 min-h-[200px] cursor-pointer group">
+          <label className="glass p-6 hover:shadow-glow-sm transition-all flex flex-col items-center justify-center gap-3 min-h-[200px] cursor-pointer group">
             <input
               type="file"
               accept=".quar"
@@ -219,20 +228,20 @@ export function WelcomeScreen() {
               className="hidden"
             />
             <Download className="w-12 h-12 text-accent group-hover:scale-110 transition-transform" />
-            <span className="font-medium">Open .quar File</span>
+            <span className="font-medium font-heading">Open .quar File</span>
             <span className="text-sm text-text-secondary">Import from file</span>
           </label>
 
           <div className="glass p-6 flex flex-col items-center justify-center gap-3 min-h-[200px] opacity-50">
             <Folder className="w-12 h-12 text-text-secondary" />
-            <span className="font-medium">Sample Projects</span>
+            <span className="font-medium font-heading">Sample Projects</span>
             <span className="text-sm text-text-secondary">Coming soon</span>
           </div>
         </div>
 
         {/* Recent Projects */}
         <div>
-          <h3 className="text-xl font-semibold mb-4">Recent Projects</h3>
+          <h3 className="text-xl font-heading font-semibold mb-4">Recent Projects</h3>
 
           {loading ? (
             <div className="text-center py-12 text-text-secondary">
@@ -248,7 +257,7 @@ export function WelcomeScreen() {
                 <button
                   key={project.id}
                   onClick={() => openProject(project.id)}
-                  className="glass p-4 hover:bg-opacity-90 transition-all text-left group"
+                  className="glass p-4 hover:-translate-y-1 hover:shadow-lg transition-all text-left group"
                 >
                   <div className="aspect-video bg-background rounded mb-3 flex items-center justify-center">
                     {project.thumbnail ? (
@@ -278,7 +287,7 @@ export function WelcomeScreen() {
           <div className="mt-8 glass p-6 rounded-lg">
             <div className="flex items-center gap-3 mb-4">
               <Database className="w-5 h-5 text-purple-400" />
-              <h3 className="text-lg font-semibold">Manage Your Data</h3>
+              <h3 className="text-lg font-heading font-semibold">Manage Your Data</h3>
             </div>
             <p className="text-sm text-text-secondary mb-4">
               All your data is stored locally in your browser. Use these controls to export or delete it.
@@ -317,11 +326,11 @@ export function WelcomeScreen() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border p-6 text-center text-text-secondary text-sm">
+      <footer className="border-t border-border p-6 text-center text-text-secondary text-sm relative z-10">
         <p>
           QUAR Editor Open Source v0.1.0 • MIT License •{' '}
           <a
-            href="https://github.com/quarteam/quar-editor"
+            href="https://github.com/FunwayHQ/quar-editor"
             className="text-accent hover:underline"
             target="_blank"
             rel="noopener noreferrer"

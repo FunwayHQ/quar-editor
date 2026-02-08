@@ -25,7 +25,7 @@ A next-generation, web-based 3D design platform that runs 100% in your browser. 
 
 ```bash
 # Clone the repository
-git clone https://github.com/quarteam/quar-editor.git
+git clone https://github.com/FunwayHQ/quar-editor.git
 cd quar-editor
 
 # Install dependencies
@@ -141,7 +141,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - **Discord**: [discord.gg/quareditor](https://discord.gg/quareditor)
 - **Twitter**: [@quareditor](https://twitter.com/quareditor)
-- **GitHub Discussions**: [github.com/quarteam/quar-editor/discussions](https://github.com/quarteam/quar-editor/discussions)
+- **GitHub Discussions**: [github.com/FunwayHQ/quar-editor/discussions](https://github.com/FunwayHQ/quar-editor/discussions)
 
 ## Comparison with Cloud Version
 
@@ -162,7 +162,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/quarteam/quar-editor/issues)
+- **Issues**: [GitHub Issues](https://github.com/FunwayHQ/quar-editor/issues)
 - **Documentation**: [docs.quar.pro](https://docs.quar.pro)
 
 ---

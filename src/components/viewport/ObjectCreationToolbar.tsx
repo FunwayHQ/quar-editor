@@ -91,7 +91,7 @@ export function ObjectCreationToolbar() {
             <button
               key={type}
               onClick={() => handleCreateObject(type)}
-              className="p-2 rounded hover:bg-[#27272A] transition-colors group relative"
+              className="p-2 rounded hover:bg-surface-2 active:scale-95 transition-all group relative"
               title={shortcut ? `Create ${primitiveLabels[type]} (${shortcut})` : `Create ${primitiveLabels[type]}`}
             >
               <Icon className="w-5 h-5 text-[#FAFAFA]" />
@@ -112,7 +112,7 @@ export function ObjectCreationToolbar() {
             <button
               key={type}
               onClick={() => handleCreateObject(type)}
-              className="p-2 rounded hover:bg-[#27272A] transition-colors group relative"
+              className="p-2 rounded hover:bg-surface-2 active:scale-95 transition-all group relative"
               title={shortcut ? `Create ${primitiveLabels[type]} (${shortcut})` : `Create ${primitiveLabels[type]}`}
             >
               <Icon className="w-5 h-5 text-[#F59E0B]" />
