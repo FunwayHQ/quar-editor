@@ -181,6 +181,24 @@ export function WelcomeScreen() {
     });
   }
 
+  function handleDeleteProject(projectId: string, projectName: string) {
+    showConfirm({
+      title: 'Delete Project',
+      message: `Are you sure you want to delete "${projectName}"? This cannot be undone.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await storage.deleteProject(projectId);
+          setProjects((prev) => prev.filter((p) => p.id !== projectId));
+          toast.success(`Deleted "${projectName}"`);
+        } catch {
+          toast.error('Failed to delete project');
+        }
+      },
+    });
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0B] flex flex-col relative overflow-x-hidden">
       {/* Header — matches Animator/Artist: Logo left, Import button right */}
@@ -258,12 +276,23 @@ export function WelcomeScreen() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {projects.map((proj) => (
-                <button
+                <div
                   key={proj.id}
-                  onClick={() => openProject(proj.id)}
-                  className="group text-left rounded-lg overflow-hidden border border-[#27272A]/60 hover:border-[#7C3AED]/40 transition-all hover:-translate-y-0.5"
+                  className="group relative text-left rounded-lg overflow-hidden border border-[#27272A]/60 hover:border-[#7C3AED]/40 transition-all hover:-translate-y-0.5 cursor-pointer"
                   style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)' }}
+                  onClick={() => openProject(proj.id)}
                 >
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteProject(proj.id, proj.name);
+                    }}
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-[#18181B]/80 border border-[#27272A]/60 text-[#52525B] opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-500/15 hover:border-red-500/30 transition-all"
+                    title="Delete project"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                   <div className="aspect-video bg-[#111113] flex items-center justify-center">
                     {proj.thumbnail ? (
                       <img src={proj.thumbnail} alt={proj.name} className="w-full h-full object-cover" />
@@ -283,7 +312,7 @@ export function WelcomeScreen() {
                       {new Date(proj.lastModified).toLocaleDateString()}
                     </p>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>
