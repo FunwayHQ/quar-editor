@@ -23,7 +23,6 @@ import { ExportDialog } from './export/ExportDialog';
 import { EditOperationsPanel } from './panels/EditOperationsPanel';
 import { AdvancedOperationsPanel } from './panels/AdvancedOperationsPanel';
 import { KnifeToolPanel } from './panels/KnifeToolPanel';
-import { ViewportToolbar } from './viewport/ViewportToolbar';
 import { MenuBar } from './MenuBar';
 import { AddMenu } from './modals/AddMenu';
 import { ContextMenu } from './ContextMenu';
@@ -175,17 +174,6 @@ export function Editor() {
         onShowAddMenu={() => setShowAddMenu(true)}
         isSaving={isSaving}
       />
-
-      {/* Toolbar row — centered transform tools */}
-      <div
-        className="flex items-center justify-center h-11"
-        style={{
-          backgroundColor: 'rgba(10, 10, 11, 0.85)',
-          borderBottom: '1px solid rgba(39, 39, 42, 0.4)',
-        }}
-      >
-        <ViewportToolbar embedded={true} />
-      </div>
 
       {/* Export Dialog */}
       {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}

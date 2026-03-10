@@ -15,6 +15,7 @@ import { useSceneStore } from '../stores/sceneStore';
 import { useToastStore } from '../stores/toastStore';
 import { serializeScene } from '../services/sceneSerializer';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
+import { ViewportToolbar } from './viewport/ViewportToolbar';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -276,8 +277,10 @@ export function MenuBar({
         ))}
       </nav>
 
-      {/* Spacer */}
-      <div className="flex-1" />
+      {/* Center — viewport toolbar */}
+      <div className="flex-1 flex items-center justify-center">
+        <ViewportToolbar embedded={true} />
+      </div>
 
       {/* Project name (right side, matching Animator pattern) */}
       {project && (
