@@ -277,10 +277,13 @@ export function MenuBar({
         ))}
       </nav>
 
-      {/* Center — viewport toolbar */}
-      <div className="flex-1 flex items-center justify-center">
+      {/* Viewport toolbar — after menus */}
+      <div className="flex items-center ml-2">
         <ViewportToolbar embedded={true} />
       </div>
+
+      {/* Spacer */}
+      <div className="flex-1" />
 
       {/* Project name (right side, matching Animator pattern) */}
       {project && (
