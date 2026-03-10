@@ -7,7 +7,7 @@
  * Sprint 5: Lighting & Environment
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment } from '@react-three/drei';
 import { useSceneStore } from '@/stores/sceneStore';
@@ -31,7 +31,6 @@ import { WeightPaintToolbar } from './WeightPaintToolbar';
 import { WeightVisualization } from './WeightVisualization';
 import { useCameraPresets } from './CameraPresets';
 import * as THREE from 'three';
-import { useEffect } from 'react';
 
 function Scene() {
   // CRITICAL FIX: Use selective subscriptions to prevent re-renders from stats updates
@@ -248,6 +247,19 @@ export function Viewport() {
   const { clearSelection: clearCurveSelection } = useCurveStore();
   const showContextMenu = useContextMenuStore((state) => state.showContextMenu);
 
+  const glDomRef = useRef<HTMLCanvasElement | null>(null);
+  const webglHandlersRef = useRef<{ onContextLost: (e: Event) => void; onContextRestored: () => void } | null>(null);
+
+  // Cleanup WebGL context listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (glDomRef.current && webglHandlersRef.current) {
+        glDomRef.current.removeEventListener('webglcontextlost', webglHandlersRef.current.onContextLost);
+        glDomRef.current.removeEventListener('webglcontextrestored', webglHandlersRef.current.onContextRestored);
+      }
+    };
+  }, []);
+
   const handleBackgroundClick = () => {
     if (isEditMode) {
       clearEditSelection();
@@ -281,15 +293,23 @@ export function Viewport() {
         }}
         onPointerMissed={handleBackgroundClick}
         onCreated={({ gl }) => {
+          // Store ref for cleanup
+          glDomRef.current = gl.domElement;
+
           // Handle WebGL context loss
-          gl.domElement.addEventListener('webglcontextlost', (event) => {
+          const onContextLost = (event: Event) => {
             event.preventDefault();
             console.warn('[WebGL] Context lost, attempting to restore...');
-          });
-
-          gl.domElement.addEventListener('webglcontextrestored', () => {
+          };
+          const onContextRestored = () => {
             console.log('[WebGL] Context restored');
-          });
+          };
+
+          gl.domElement.addEventListener('webglcontextlost', onContextLost);
+          gl.domElement.addEventListener('webglcontextrestored', onContextRestored);
+
+          // Store handlers for cleanup
+          webglHandlersRef.current = { onContextLost, onContextRestored };
         }}
       >
         {/* Camera Controls */}

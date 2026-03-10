@@ -32,6 +32,8 @@ interface ToastStore {
 
 const generateId = () => `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+const toastTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export const useToastStore = create<ToastStore>((set, get) => ({
   toasts: [],
 
@@ -49,19 +51,28 @@ export const useToastStore = create<ToastStore>((set, get) => ({
 
     // Auto-remove after duration
     if (newToast.duration > 0) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        toastTimers.delete(id);
         get().removeToast(id);
       }, newToast.duration);
+      toastTimers.set(id, timer);
     }
   },
 
   removeToast: (id) => {
+    const timer = toastTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      toastTimers.delete(id);
+    }
     set((state) => ({
       toasts: state.toasts.filter((toast) => toast.id !== id),
     }));
   },
 
   clearAll: () => {
+    toastTimers.forEach((timer) => clearTimeout(timer));
+    toastTimers.clear();
     set({ toasts: [] });
   },
 

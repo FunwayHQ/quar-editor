@@ -25,7 +25,7 @@ export function KnifeFaceHighlight({
   scale,
 }: KnifeFaceHighlightProps) {
   const geometryRef = useRef<THREE.BufferGeometry | null>(null);
-  const { editingObjectId } = useEditModeStore();
+  const { editingObjectId, geometryVersion } = useEditModeStore();
 
   // Create geometry showing face edges using QMesh
   const faceGeometry = useMemo(() => {
@@ -84,7 +84,7 @@ export function KnifeFaceHighlight({
     geometryRef.current = edgeGeo;
 
     return edgeGeo;
-  }, [geometry, faceIndex, editingObjectId]);
+  }, [faceIndex, editingObjectId, geometryVersion]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -85,6 +85,7 @@ export class MeshOperations {
     }
 
     const qMesh = sceneObject.qMesh;
+    const clampedAmount = Math.max(0, Math.min(0.99, insetAmount));
 
     // Inset faces by moving vertices toward face center
     selectedFaceIds.forEach(faceId => {
@@ -96,7 +97,7 @@ export class MeshOperations {
 
       // Move each vertex toward the center
       vertices.forEach(vertex => {
-        vertex.position.lerp(center, insetAmount);
+        vertex.position.lerp(center, clampedAmount);
       });
     });
 

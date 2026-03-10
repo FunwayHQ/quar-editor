@@ -38,7 +38,8 @@ export class AnimationEngine {
       this.stop();
     }
 
-    this.startTime = performance.now() - (currentTime * 1000 / playbackSpeed);
+    const speed = playbackSpeed || 1;
+    this.startTime = performance.now() - (currentTime * 1000 / speed);
     this.lastTime = performance.now();
     this.cachedTrackValues.clear();
 
@@ -48,14 +49,14 @@ export class AnimationEngine {
         return;
       }
 
-      const elapsed = ((now - this.startTime) / 1000) * playbackSpeed; // Convert to seconds and apply speed
+      const elapsed = ((now - this.startTime) / 1000) * speed; // Convert to seconds and apply speed
       let newTime = elapsed;
 
       // Handle looping
       if (newTime >= animation.duration) {
         if (animation.loop) {
           newTime = newTime % animation.duration;
-          this.startTime = now - (newTime * 1000 / playbackSpeed);
+          this.startTime = now - (newTime * 1000 / speed);
         } else {
           newTime = animation.duration;
           onTimeUpdate(newTime);

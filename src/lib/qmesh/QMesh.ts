@@ -103,7 +103,9 @@ export class QFace {
       normal.z += (v1.x - v2.x) * (v1.y + v2.y);
     }
 
-    return normal.normalize();
+    normal.normalize();
+    if (!isFinite(normal.x)) normal.set(0, 1, 0);
+    return normal;
   }
 
   /**
@@ -277,34 +279,59 @@ export class QMesh {
       });
     }
 
-    // Step 3: Detect quads (adapted from QuadDetection.ts)
+    // Step 3: Detect quads using edge-adjacency map (O(n) instead of O(n²))
+    // Build a map from edge key (sorted vertex IDs) to triangle indices sharing that edge
+    const edgeToTriangles = new Map<string, number[]>();
+
+    const getEdgeKey = (v1Id: string, v2Id: string): string => {
+      return v1Id < v2Id ? `${v1Id}|${v2Id}` : `${v2Id}|${v1Id}`;
+    };
+
+    for (let i = 0; i < triangles.length; i++) {
+      const tri = triangles[i];
+      for (let e = 0; e < 3; e++) {
+        const key = getEdgeKey(tri.vertices[e].id, tri.vertices[(e + 1) % 3].id);
+        const list = edgeToTriangles.get(key);
+        if (list) {
+          list.push(i);
+        } else {
+          edgeToTriangles.set(key, [i]);
+        }
+      }
+    }
+
+    // Compute triangle normal
+    const triNormal = (tri: { vertices: QVertex[] }): THREE.Vector3 => {
+      const [a, b, c] = tri.vertices;
+      const ab = new THREE.Vector3().subVectors(b.position, a.position);
+      const ac = new THREE.Vector3().subVectors(c.position, a.position);
+      return ab.cross(ac).normalize();
+    };
+
+    // For each triangle, find its quad partner via shared edge
     const findQuadPair = (triangleIdx: number): number | null => {
       const tri = triangles[triangleIdx];
-      const triVertexIds = new Set(tri.vertices.map(v => v.id));
-
-      for (let j = 0; j < triangles.length; j++) {
-        if (j === triangleIdx || triangles[j].used) continue;
-
-        const otherTri = triangles[j];
-        const otherVertexIds = otherTri.vertices.map(v => v.id);
-
-        // Count shared vertices
-        const sharedCount = otherVertexIds.filter(id => triVertexIds.has(id)).length;
-
-        if (sharedCount === 2) {
-          // Check if they form a quad (4 unique vertices total)
+      const n1 = triNormal(tri);
+      for (let e = 0; e < 3; e++) {
+        const key = getEdgeKey(tri.vertices[e].id, tri.vertices[(e + 1) % 3].id);
+        const sharing = edgeToTriangles.get(key);
+        if (!sharing) continue;
+        for (const j of sharing) {
+          if (j === triangleIdx || triangles[j].used) continue;
+          // Verify 4 unique vertices
           const allVertexIds = new Set([
             ...tri.vertices.map(v => v.id),
-            ...otherTri.vertices.map(v => v.id),
+            ...triangles[j].vertices.map(v => v.id),
           ]);
-
-          if (allVertexIds.size === 4) {
-            return j; // Found quad pair
+          if (allVertexIds.size !== 4) continue;
+          // Coplanarity check: normals must be roughly parallel (dot > 0.99)
+          const n2 = triNormal(triangles[j]);
+          if (Math.abs(n1.dot(n2)) > 0.99) {
+            return j;
           }
         }
       }
-
-      return null; // No quad pair
+      return null;
     };
 
     // Step 4: Create faces (quads and standalone triangles)
@@ -454,6 +481,52 @@ export class QMesh {
         twin.twin = he;
       }
     });
+  }
+
+  /**
+   * Link twin half-edges only for the given faces (and their neighbors).
+   * Much faster than full linkTwins() after local operations like splitFace.
+   */
+  private linkTwinsForFaces(faceIds: string[]): void {
+    // Collect all half-edges from the specified faces
+    const affectedHEs: QHalfEdge[] = [];
+    for (const faceId of faceIds) {
+      const face = this.faces.get(faceId);
+      if (!face || !face.oneHalfEdge) continue;
+      let he = face.oneHalfEdge;
+      do {
+        affectedHEs.push(he);
+        he = he.next!;
+      } while (he !== face.oneHalfEdge);
+    }
+
+    // Clear existing twins on affected half-edges
+    for (const he of affectedHEs) {
+      if (he.twin) {
+        he.twin.twin = undefined;
+        he.twin = undefined;
+      }
+    }
+
+    // Build edge map from ALL half-edges (needed to find twins in unaffected faces)
+    const edgeMap = new Map<string, QHalfEdge>();
+    this.halfEdges.forEach(he => {
+      const fromVertex = he.getFromVertex();
+      if (!fromVertex) return;
+      edgeMap.set(`${fromVertex.id}->${he.toVertex.id}`, he);
+    });
+
+    // Re-link twins only for affected half-edges
+    for (const he of affectedHEs) {
+      if (he.twin) continue;
+      const fromVertex = he.getFromVertex();
+      if (!fromVertex) continue;
+      const twin = edgeMap.get(`${he.toVertex.id}->${fromVertex.id}`);
+      if (twin) {
+        he.twin = twin;
+        twin.twin = he;
+      }
+    }
   }
 
   /**
@@ -1182,6 +1255,20 @@ export class QMesh {
       return { newFaceIds: [], error: 'Both cut points are on the same edge. Place them on different edges.' };
     }
 
+    // Dry-run: verify the split won't produce degenerate faces before modifying topology
+    const N = vertices.length;
+    const e1 = cut1Info.edgeIndex!;
+    const e2 = cut2Info.edgeIndex!;
+    // Count vertices in each resulting face (excluding cut vertices themselves)
+    let countA = 0;
+    { let i = (e1 + 1) % N; const stop = (e2 + 1) % N; while (i !== stop) { countA++; i = (i + 1) % N; } }
+    let countB = 0;
+    { let i = (e2 + 1) % N; const stop = (e1 + 1) % N; while (i !== stop) { countB++; i = (i + 1) % N; } }
+    // Each face gets +2 cut vertices, so total = count + 2; need >= 3
+    if (countA + 2 < 3 || countB + 2 < 3) {
+      return { newFaceIds: [], error: 'Cut would produce a degenerate face (adjacent edges selected)' };
+    }
+
     // IMPORTANT: Save the vertex list BEFORE creating new vertices.
     // createVertexOnEdge modifies twin half-edges' toVertex, which corrupts
     // face.getVertices() results (it uses twin.toVertex to get "from" vertex).
@@ -1206,8 +1293,10 @@ export class QMesh {
       savedVertices
     );
 
-    // Step 4: Update topology
-    this.linkTwins();
+    // Step 4: Update topology (only for affected faces, not entire mesh)
+    if (newFaceIds.length > 0) {
+      this.linkTwinsForFaces(newFaceIds);
+    }
 
     return { newFaceIds };
   }
@@ -1218,7 +1307,7 @@ export class QMesh {
   private findCutPointOnFace(
     face: QFace,
     cutPoint: THREE.Vector3,
-    tolerance: number = 0.1
+    tolerance: number = 0.05
   ): { onVertex?: QVertex; edge?: QHalfEdge; edgeIndex?: number } | null {
     const vertices = face.getVertices();
     const halfEdges = face.getHalfEdges();
@@ -1269,6 +1358,9 @@ export class QMesh {
     // Its twin belongs to the adjacent face — we must insert the new vertex there
     // so the adjacent face shares the vertex and deforms correctly when it moves.
     const twinHE = halfEdge.twin;
+    if (!twinHE || !twinHE.face) {
+      console.warn(`[QMesh] Cutting on boundary edge — adjacent face won't be split`);
+    }
     if (twinHE && twinHE.face) {
       // twinHE goes from B → A on the adjacent face.
       // Split into: B → newVertex (twinHE, modified) and newVertex → A (newHE, created).
@@ -1410,15 +1502,15 @@ export class QMesh {
     const dotA = normalA.dot(originalNormal);
     const dotB = normalB.dot(originalNormal);
 
-    // If normal is flipped or nearly perpendicular, reverse the vertex order
-    if (dotA < 0.1) {
+    // Only flip if normal is clearly inverted (> 120 degrees off)
+    if (dotA < -0.5) {
       console.log(`[QMesh] Flipping face A winding (dot=${dotA.toFixed(3)})`);
       const reversedA = [...dedupA].reverse();
       this.faces.delete(faceAId);
       this.createFaceFromVertices(faceAId, reversedA);
     }
 
-    if (dotB < 0.1) {
+    if (dotB < -0.5) {
       console.log(`[QMesh] Flipping face B winding (dot=${dotB.toFixed(3)})`);
       const reversedB = [...dedupB].reverse();
       this.faces.delete(faceBId);

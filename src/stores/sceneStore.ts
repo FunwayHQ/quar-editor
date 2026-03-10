@@ -90,13 +90,13 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   // Grid settings (Sprint Y: Professional grid with units)
   gridSize: 20,                      // 20 meters total
-  setGridSize: (size) => set({ gridSize: size }),
+  setGridSize: (size) => set({ gridSize: Math.max(1, size) }),
 
   gridDivisions: 20,                 // 20 divisions
-  setGridDivisions: (divisions) => set({ gridDivisions: divisions }),
+  setGridDivisions: (divisions) => set({ gridDivisions: Math.max(1, Math.round(divisions)) }),
 
   gridUnitSize: 1.0,                 // 1 meter per square
-  setGridUnitSize: (size) => set({ gridUnitSize: size }),
+  setGridUnitSize: (size) => set({ gridUnitSize: Math.max(0.01, size) }),
 
   gridColor: '#7C3AED',              // Purple accent
   setGridColor: (color) => set({ gridColor: color }),

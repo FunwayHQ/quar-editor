@@ -190,6 +190,10 @@ const nameCounters: Record<string, number> = {
   armature: 0,
 };
 
+function resetNameCounters() {
+  Object.keys(nameCounters).forEach(key => { nameCounters[key] = 0; });
+}
+
 // Helper to generate unique IDs
 function generateId(): string {
   return `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -776,14 +780,34 @@ export const useObjectsStore = create<ObjectsState>((set, get) => ({
 
     console.log(`[objectsStore] Loading ${data.length} objects from saved data`);
 
+    // Reset name counters so new projects start fresh
+    resetNameCounters();
+
     set((state) => {
       const newObjects = new Map<string, SceneObject>();
 
       data.forEach((obj: any) => {
+        // Validate required fields
+        if (!obj || !obj.id || !obj.type) {
+          console.warn('[objectsStore] Skipping invalid object (missing id or type):', obj);
+          return;
+        }
+
         // Strip non-serializable properties that may exist from old saves
         // (renderGeometry/qMesh are class instances that don't survive JSON round-trip)
         const { renderGeometry: _rg, qMesh: _qm, ...cleanObj } = obj;
         newObjects.set(cleanObj.id, cleanObj);
+
+        // Update name counter to avoid collisions with new objects
+        if (cleanObj.type && nameCounters[cleanObj.type] !== undefined) {
+          const match = cleanObj.name?.match(/\d+$/);
+          if (match) {
+            const num = parseInt(match[0], 10);
+            if (num > nameCounters[cleanObj.type]) {
+              nameCounters[cleanObj.type] = num;
+            }
+          }
+        }
       });
 
       return { objects: newObjects };

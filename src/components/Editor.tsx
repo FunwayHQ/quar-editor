@@ -7,7 +7,6 @@
 
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Download, FileDown } from 'lucide-react';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
 import { useAppStore } from '../stores/appStore';
 import { useToastStore } from '../stores/toastStore';
@@ -25,6 +24,7 @@ import { EditOperationsPanel } from './panels/EditOperationsPanel';
 import { AdvancedOperationsPanel } from './panels/AdvancedOperationsPanel';
 import { KnifeToolPanel } from './panels/KnifeToolPanel';
 import { ViewportToolbar } from './viewport/ViewportToolbar';
+import { MenuBar } from './MenuBar';
 import { AddMenu } from './modals/AddMenu';
 import { ContextMenu } from './ContextMenu';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
@@ -165,73 +165,27 @@ export function Editor() {
 
   return (
     <div className="h-screen bg-background flex flex-col">
-      {/* Top Toolbar - Three column grid for perfect centering */}
-      <header className="p-2 grid grid-cols-3 items-center shadow-header-glow" style={{ borderBottom: '1px solid rgba(39,39,42,0.6)' }}>
-        {/* Left Column */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/')}
-            className="btn-ghost p-2"
-            title="Back to projects"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+      {/* Menu Bar — matches QUAR Animator/Artist design */}
+      <MenuBar
+        project={project}
+        onProjectUpdate={(p) => setProject(p)}
+        onSave={saveProject}
+        onExport={() => setShowExportDialog(true)}
+        onDownloadQuar={downloadQuar}
+        onShowAddMenu={() => setShowAddMenu(true)}
+        isSaving={isSaving}
+      />
 
-          <img src="/logo-dark.svg" alt="QUAR Editor" className="h-8" />
-
-          <div className="w-px h-5 bg-border/50" />
-
-          <input
-            type="text"
-            value={project.name}
-            onChange={(e) => setProject({ ...project, name: e.target.value })}
-            className="input bg-transparent border-none text-sm font-semibold focus:ring-0 px-2"
-            title="Click to rename project"
-            style={{ width: `${project.name.length + 2}ch` }}
-          />
-
-          {isOffline && (
-            <span className="text-xs text-text-secondary px-2 py-1 bg-panel rounded">
-              Offline
-            </span>
-          )}
-        </div>
-
-        {/* Center Column - Always centered regardless of left/right content */}
-        <div className="flex items-center justify-center" style={{ marginLeft: '-70px' }}>
-          {!isEditMode && <ViewportToolbar embedded={true} />}
-        </div>
-
-        {/* Right Column - Icon-only buttons with tooltips */}
-        <div className="flex items-center gap-1.5 justify-end">
-          <button
-            onClick={saveProject}
-            className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-sm"
-            title="Save project (Ctrl+S)"
-          >
-            <Save className="w-4 h-4" />
-            <span className="hidden xl:inline">Save</span>
-          </button>
-
-          <button
-            onClick={() => setShowExportDialog(true)}
-            className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-sm"
-            title="Export scene"
-          >
-            <FileDown className="w-4 h-4" />
-            <span className="hidden xl:inline">Export</span>
-          </button>
-
-          <button
-            onClick={downloadQuar}
-            className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-sm"
-            title="Download .quar file"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden xl:inline">.quar</span>
-          </button>
-        </div>
-      </header>
+      {/* Toolbar row — centered transform tools */}
+      <div
+        className="flex items-center justify-center h-11"
+        style={{
+          backgroundColor: 'rgba(10, 10, 11, 0.85)',
+          borderBottom: '1px solid rgba(39, 39, 42, 0.4)',
+        }}
+      >
+        <ViewportToolbar embedded={true} />
+      </div>
 
       {/* Export Dialog */}
       {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}

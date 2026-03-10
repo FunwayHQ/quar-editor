@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Folder, Download, Shield, Database, Trash2, FileDown, HelpCircle } from 'lucide-react';
+import { Plus, Download, Shield, Database, Trash2, FileDown } from 'lucide-react';
 import { getStorageAdapter, ProjectData } from '../lib/storage';
 import { useAppStore } from '../stores/appStore';
 import { useConsentStore } from '../stores/consentStore';
@@ -182,191 +182,154 @@ export function WelcomeScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative overflow-x-hidden">
-      {/* Subtle radial gradient background */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.08) 0%, transparent 60%)',
-        }}
-      />
-
-      {/* Header */}
-      <header className="border-b border-border p-6 relative z-10">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <img src="/logo-dark.svg" alt="QUAR Editor" className="h-12" />
-            <span className="text-[10px] font-mono text-text-tertiary bg-surface-2 px-2 py-0.5 rounded-full border border-border/50">v0.1.0</span>
-            {isOffline && (
-              <span className="text-sm text-text-secondary px-2 py-1 bg-panel rounded">
-                Offline Mode
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full p-8 relative z-10">
-        <div className="mb-8">
-          <h2 className="text-3xl font-heading font-bold mb-2">Your Projects</h2>
-          <p className="text-text-secondary">
-            All projects are stored locally on your device
-          </p>
-        </div>
-
-        {/* Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <button
-            onClick={createNewProject}
-            className="glass p-6 hover:shadow-glow-sm transition-all flex flex-col items-center justify-center gap-3 min-h-[200px] group"
-          >
-            <Plus className="w-12 h-12 text-accent group-hover:scale-110 transition-transform" />
-            <span className="font-medium font-heading">New Project</span>
-            <span className="text-sm text-text-secondary">Start from scratch</span>
-          </button>
-
-          <label className="glass p-6 hover:shadow-glow-sm transition-all flex flex-col items-center justify-center gap-3 min-h-[200px] cursor-pointer group">
-            <input
-              type="file"
-              accept=".quar"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Download className="w-12 h-12 text-accent group-hover:scale-110 transition-transform" />
-            <span className="font-medium font-heading">Open .quar File</span>
-            <span className="text-sm text-text-secondary">Import from file</span>
-          </label>
-
-          <div className="glass p-6 flex flex-col items-center justify-center gap-3 min-h-[200px] opacity-50">
-            <Folder className="w-12 h-12 text-text-secondary" />
-            <span className="font-medium font-heading">Sample Projects</span>
-            <span className="text-sm text-text-secondary">Coming soon</span>
-          </div>
-        </div>
-
-        {/* Recent Projects */}
-        <div>
-          <h3 className="text-xl font-heading font-semibold mb-4">Recent Projects</h3>
-
-          {loading ? (
-            <div className="text-center py-12 text-text-secondary">
-              Loading projects...
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="text-center py-12 text-text-secondary">
-              No projects yet. Create one to get started!
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {projects.map((project) => (
-                <button
-                  key={project.id}
-                  onClick={() => openProject(project.id)}
-                  className="glass p-4 hover:-translate-y-1 hover:shadow-lg transition-all text-left group"
-                >
-                  <div className="aspect-video bg-background rounded mb-3 flex items-center justify-center">
-                    {project.thumbnail ? (
-                      <img
-                        src={project.thumbnail}
-                        alt={project.name}
-                        className="w-full h-full object-cover rounded"
-                      />
-                    ) : (
-                      <Folder className="w-12 h-12 text-text-secondary" />
-                    )}
-                  </div>
-                  <h4 className="font-medium truncate group-hover:text-accent transition-colors">
-                    {project.name}
-                  </h4>
-                  <p className="text-sm text-text-secondary">
-                    {new Date(project.lastModified).toLocaleDateString()}
-                  </p>
-                </button>
-              ))}
-            </div>
+    <div className="min-h-screen bg-[#0A0A0B] flex flex-col relative overflow-x-hidden">
+      {/* Header — matches Animator/Artist: Logo left, Import button right */}
+      <header
+        className="flex items-center justify-between h-12 px-4 relative z-10"
+        style={{ borderBottom: '1px solid rgba(39, 39, 42, 0.5)' }}
+      >
+        <div className="flex items-center gap-3">
+          <img src="/logo-dark.svg" alt="QUAR Editor" className="h-7" />
+          <span className="text-[10px] font-mono text-[#52525B] bg-[#18181B] px-2 py-0.5 rounded border border-[#27272A]/50">
+            v0.1.0
+          </span>
+          {isOffline && (
+            <span className="text-xs text-[#71717A] px-2 py-0.5 bg-[#18181B] rounded border border-[#27272A]/50">
+              Offline
+            </span>
           )}
         </div>
 
-        {/* Data Management */}
-        {showDataManagement && (
-          <div className="mt-8 glass p-6 rounded-lg">
-            <div className="flex items-center gap-3 mb-4">
-              <Database className="w-5 h-5 text-purple-400" />
-              <h3 className="text-lg font-heading font-semibold">Manage Your Data</h3>
+        <label
+          className="flex items-center gap-2 px-3 py-1.5 text-[13px] text-[#A1A1AA] border border-[#27272A] rounded cursor-pointer hover:border-[#3f3f46] hover:text-[#FAFAFA] transition-colors"
+        >
+          <input type="file" accept=".quar" onChange={handleFileUpload} className="hidden" />
+          <Download className="w-3.5 h-3.5" />
+          Import .quar
+        </label>
+      </header>
+
+      {/* Main content area */}
+      <main className="flex-1 flex flex-col relative z-10">
+        {/* Projects grid or empty state */}
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin w-10 h-10 border-3 border-[#7C3AED] border-t-transparent rounded-full mx-auto mb-3" />
+              <p className="text-[#71717A] text-sm">Loading projects...</p>
             </div>
-            <p className="text-sm text-text-secondary mb-4">
-              All your data is stored locally in your browser. Use these controls to export or delete it.
-            </p>
-            <div className="flex flex-wrap gap-3">
+          </div>
+        ) : projects.length === 0 ? (
+          /* Empty state — centered like Animator */
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="mb-4 flex justify-center">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#52525B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+              </div>
+              <p className="text-[#71717A] text-sm mb-5">No projects yet. Create your first 3D scene or import an existing .quar file.</p>
               <button
-                onClick={exportAllData}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-[#27272A] hover:bg-[#3f3f46] rounded-lg transition-colors"
+                onClick={createNewProject}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 active:scale-[0.97]"
+                style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)' }}
               >
-                <FileDown className="w-4 h-4" />
-                Export All Data
+                <Plus className="w-4 h-4" />
+                New Project
               </button>
+            </div>
+          </div>
+        ) : (
+          /* Projects list */
+          <div className="max-w-6xl mx-auto w-full p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-medium text-[#FAFAFA]">Projects</h2>
               <button
-                onClick={handleClearProjects}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors"
+                onClick={createNewProject}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 active:scale-[0.97]"
+                style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)' }}
               >
-                <Trash2 className="w-4 h-4" />
-                Clear All Projects
+                <Plus className="w-3.5 h-3.5" />
+                New Project
               </button>
-              <button
-                onClick={handleClearPreferences}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded-lg transition-colors"
-              >
-                Clear Preferences
-              </button>
-              <button
-                onClick={handleRevokeConsent}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg transition-colors"
-              >
-                <Shield className="w-4 h-4" />
-                Revoke Consent
-              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {projects.map((proj) => (
+                <button
+                  key={proj.id}
+                  onClick={() => openProject(proj.id)}
+                  className="group text-left rounded-lg overflow-hidden border border-[#27272A]/60 hover:border-[#7C3AED]/40 transition-all hover:-translate-y-0.5"
+                  style={{ backgroundColor: 'rgba(24, 24, 27, 0.5)' }}
+                >
+                  <div className="aspect-video bg-[#111113] flex items-center justify-center">
+                    {proj.thumbnail ? (
+                      <img src={proj.thumbnail} alt={proj.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3f3f46" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                        <line x1="12" y1="22.08" x2="12" y2="12" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <h4 className="text-sm font-medium text-[#E4E4E7] truncate group-hover:text-[#A855F7] transition-colors">
+                      {proj.name}
+                    </h4>
+                    <p className="text-xs text-[#52525B] mt-0.5">
+                      {new Date(proj.lastModified).toLocaleDateString()}
+                    </p>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border p-6 text-center text-text-secondary text-sm relative z-10">
-        <p>
-          QUAR Editor Open Source v0.1.0 • MIT License •{' '}
-          <a
-            href="https://github.com/FunwayHQ/quar-editor"
-            className="text-accent hover:underline"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            GitHub
-          </a>
-          {' • '}
-          <button
-            onClick={() => setShowPrivacyPolicy(true)}
-            className="text-accent hover:underline"
-          >
-            Privacy Policy
-          </button>
-          {' • '}
-          <button
-            onClick={() => setShowDataManagement((v) => !v)}
-            className="text-accent hover:underline"
-          >
-            Manage Data
-          </button>
-          {' • '}
-          <button
-            onClick={() => navigate('/help')}
-            className="text-accent hover:underline inline-flex items-center gap-1"
-          >
-            <HelpCircle className="w-3.5 h-3.5 inline" />
-            Help & Guide
-          </button>
-        </p>
+      {/* Footer — compact, links only */}
+      <footer className="px-4 py-3 text-center text-[11px] text-[#52525B] relative z-10" style={{ borderTop: '1px solid rgba(39, 39, 42, 0.3)' }}>
+        <span>QUAR Editor v0.1.0 • MIT License</span>
+        {' • '}
+        <a href="https://github.com/FunwayHQ/quar-editor" className="text-[#71717A] hover:text-[#A1A1AA] transition-colors" target="_blank" rel="noopener noreferrer">GitHub</a>
+        {' • '}
+        <button onClick={() => setShowPrivacyPolicy(true)} className="text-[#71717A] hover:text-[#A1A1AA] transition-colors">Privacy</button>
+        {' • '}
+        <button onClick={() => setShowDataManagement((v) => !v)} className="text-[#71717A] hover:text-[#A1A1AA] transition-colors">Manage Data</button>
+        {' • '}
+        <button onClick={() => navigate('/help')} className="text-[#71717A] hover:text-[#A1A1AA] transition-colors">Help</button>
       </footer>
+
+      {/* Data Management Drawer */}
+      {showDataManagement && (
+        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 w-[480px] p-4 rounded-lg border border-[#27272A] shadow-xl" style={{ backgroundColor: 'rgba(24, 24, 27, 0.97)', backdropFilter: 'blur(12px)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-[#7C3AED]" />
+              <h3 className="text-sm font-medium text-[#FAFAFA]">Manage Data</h3>
+            </div>
+            <button onClick={() => setShowDataManagement(false)} className="text-[#52525B] hover:text-[#A1A1AA] text-lg leading-none">&times;</button>
+          </div>
+          <p className="text-xs text-[#71717A] mb-3">All data is stored locally in your browser.</p>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={exportAllData} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#27272A] hover:bg-[#3f3f46] rounded transition-colors text-[#A1A1AA]">
+              <FileDown className="w-3.5 h-3.5" /> Export All
+            </button>
+            <button onClick={handleClearProjects} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded transition-colors">
+              <Trash2 className="w-3.5 h-3.5" /> Clear Projects
+            </button>
+            <button onClick={handleClearPreferences} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/20 rounded transition-colors">
+              Reset Prefs
+            </button>
+            <button onClick={handleRevokeConsent} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#A855F7] bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded transition-colors">
+              <Shield className="w-3.5 h-3.5" /> Revoke Consent
+            </button>
+          </div>
+        </div>
+      )}
 
       {showPrivacyPolicy && (
         <PrivacyPolicy onClose={() => setShowPrivacyPolicy(false)} />

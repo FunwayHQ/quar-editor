@@ -12,10 +12,11 @@ import * as THREE from 'three';
  * Apply Catmull-Clark subdivision to a QMesh
  */
 export function applySubdivisionModifier(qMesh: QMesh, levels: number): QMesh {
+  const clampedLevels = Math.max(0, Math.min(5, Math.round(levels)));
   let subdividedMesh = qMesh;
 
   // Run the subdivision algorithm `levels` times
-  for (let i = 0; i < levels; i++) {
+  for (let i = 0; i < clampedLevels; i++) {
     subdividedMesh = catmullClarkIteration(subdividedMesh);
     console.log(`[Subdivision] Completed iteration ${i + 1}/${levels}`);
   }

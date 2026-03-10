@@ -52,7 +52,12 @@ export function useLoadProject({
 
         // Deserialize scene data into stores
         if (data.sceneData) {
-          deserializeScene(data.sceneData);
+          try {
+            deserializeScene(data.sceneData);
+          } catch (deserializeError) {
+            console.error('[useLoadProject] Failed to deserialize scene:', deserializeError);
+            throw new Error('Project data is corrupted and cannot be loaded');
+          }
         }
 
         onLoadComplete?.(data);

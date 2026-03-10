@@ -63,9 +63,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Build PWA
-        run: npm run build:pwa
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

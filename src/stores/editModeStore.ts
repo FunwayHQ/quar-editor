@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import { SelectionMode } from '../types/polygon';
+import { useKnifeToolStore } from './knifeToolStore';
 
 interface EditModeStore {
   // Edit mode state
@@ -101,12 +102,10 @@ export const useEditModeStore = create<EditModeStore>((set, get) => ({
   }),
 
   exitEditMode: () => {
-    // Import knife tool store dynamically to avoid circular dependency
-    import('./knifeToolStore').then(({ useKnifeToolStore }) => {
-      if (useKnifeToolStore.getState().isActive) {
-        useKnifeToolStore.getState().deactivateTool();
-      }
-    });
+    // Deactivate knife tool if active
+    if (useKnifeToolStore.getState().isActive) {
+      useKnifeToolStore.getState().deactivateTool();
+    }
 
     set({
       isEditMode: false,

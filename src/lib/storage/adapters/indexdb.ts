@@ -13,14 +13,22 @@ export class IndexedDBAdapter implements IStorageAdapter {
   async getProjects(): Promise<ProjectData[]> {
     const projects = await db.projects.orderBy('lastModified').reverse().toArray();
 
-    return projects.map(p => ({
-      id: p.id!,
-      name: p.name,
-      thumbnail: p.thumbnail,
-      sceneData: JSON.parse(p.sceneData),
-      created: p.created,
-      lastModified: p.lastModified
-    }));
+    return projects.map(p => {
+      let sceneData = {};
+      try {
+        sceneData = JSON.parse(p.sceneData);
+      } catch (e) {
+        console.warn(`[IndexedDB] Corrupted scene data for project ${p.id}, skipping`);
+      }
+      return {
+        id: p.id!,
+        name: p.name,
+        thumbnail: p.thumbnail,
+        sceneData,
+        created: p.created,
+        lastModified: p.lastModified
+      };
+    });
   }
 
   async getProject(id: string): Promise<ProjectData | null> {
@@ -28,11 +36,18 @@ export class IndexedDBAdapter implements IStorageAdapter {
 
     if (!project) return null;
 
+    let sceneData = {};
+    try {
+      sceneData = JSON.parse(project.sceneData);
+    } catch (e) {
+      console.warn(`[IndexedDB] Corrupted scene data for project ${project.id}`);
+    }
+
     return {
       id: project.id!,
       name: project.name,
       thumbnail: project.thumbnail,
-      sceneData: JSON.parse(project.sceneData),
+      sceneData,
       created: project.created,
       lastModified: project.lastModified
     };

@@ -11,6 +11,7 @@ import * as THREE from 'three';
  */
 export function resampleCurve(points: THREE.Vector2[], targetCount: number): THREE.Vector2[] {
   if (points.length === 0) return [];
+  if (targetCount <= 1) return points.length > 0 ? [points[0].clone()] : [];
   if (points.length === targetCount) return points;
 
   // Create a curve from points

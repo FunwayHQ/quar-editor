@@ -35,7 +35,7 @@ export function RightSidebar() {
         setActiveTab('properties');
       }
     }
-  }, [isEditMode]);
+  }, [isEditMode, activeTab]);
 
   // Auto-switch to boolean tab when exactly 2 objects selected
   React.useEffect(() => {

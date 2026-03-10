@@ -77,8 +77,8 @@ export function loftCurves(
       vertices.push(x, y, z);
 
       // UVs
-      const u = pointIdx / (curvePoints.length - 1);
-      const v = curveIdx / (curves.length - 1);
+      const u = pointIdx / Math.max(1, curvePoints.length - 1);
+      const v = curveIdx / Math.max(1, curves.length - 1);
       uvs.push(u, v);
     }
   }

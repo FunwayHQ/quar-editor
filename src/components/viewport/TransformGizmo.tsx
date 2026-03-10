@@ -110,18 +110,20 @@ export function TransformGizmo() {
         executeCommand(command);
       };
 
-      controls.addEventListener('change', handleChange);
-      controls.addEventListener('dragging-changed', (event: any) => {
+      const handleDragChanged = (event: any) => {
         if (event.value) {
           handleChangeStart();
         } else {
           handleChangeEnd();
         }
-      });
+      };
+
+      controls.addEventListener('change', handleChange);
+      controls.addEventListener('dragging-changed', handleDragChanged);
 
       return () => {
         controls.removeEventListener('change', handleChange);
-        controls.removeEventListener('dragging-changed', handleChangeStart);
+        controls.removeEventListener('dragging-changed', handleDragChanged);
       };
     }
   }, [selectedObject, transformMode, updateObject, executeCommand, worldTransform]);

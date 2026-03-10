@@ -52,7 +52,9 @@ export function performUnion(
       triangles: result.geometry.index!.count / 3
     };
 
-    result.geometry = cleanGeometry(result.geometry);
+    const oldGeo = result.geometry;
+    result.geometry = cleanGeometry(oldGeo);
+    oldGeo.dispose();
 
     console.log('[BooleanOps] After cleaning:', {
       before: beforeClean,
@@ -98,7 +100,9 @@ export function performSubtract(
     }
 
     // Clean up geometry
-    result.geometry = cleanGeometry(result.geometry);
+    const oldSubGeo = result.geometry;
+    result.geometry = cleanGeometry(oldSubGeo);
+    oldSubGeo.dispose();
 
     console.log('[BooleanOps] Subtract completed successfully');
     return result;
@@ -150,7 +154,9 @@ export function performIntersect(
     }
 
     // Clean up geometry
-    result.geometry = cleanGeometry(result.geometry);
+    const oldIntGeo = result.geometry;
+    result.geometry = cleanGeometry(oldIntGeo);
+    oldIntGeo.dispose();
 
     console.log('[BooleanOps] Intersect completed successfully');
     return result;

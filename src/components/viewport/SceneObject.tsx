@@ -18,14 +18,12 @@ import { BoneRenderer } from './BoneRenderer';
 import { SkinnedMeshRenderer } from './SkinnedMeshRenderer';
 import { useBoneStore } from '../../stores/boneStore';
 import { useEditModeStore } from '../../stores/editModeStore';
-import { useKnifeToolStore } from '../../stores/knifeToolStore';
+import { useKnifeToolClick } from '../../hooks/useKnifeToolClick';
 import { meshRegistry } from '../../lib/mesh/MeshRegistry';
-import {
-  findLineIntersections,
-  findNearbyEdge,
-  closestPointOnLine,
-} from '../../lib/geometry/IntersectionUtils';
 import { getQuadEdges } from '../../lib/geometry/EdgeFiltering';
+
+// Shared TextureLoader instance (stateless, reusable)
+const sharedTextureLoader = new THREE.TextureLoader();
 
 // QMesh wireframe: renders actual quad/polygon edges instead of triangulation diagonals
 // Uses useFrame to stay in sync during vertex drag (QMesh is mutated in place)
@@ -169,16 +167,8 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
   const { handleEditModeClick, isEditMode } = useEditModePicking();
   const { editingObjectId, geometryVersion } = useEditModeStore();
 
-  // Knife tool state
-  const {
-    isActive: isKnifeActive,
-    cutMode,
-    drawingPath,
-    intersectionPoints,
-    targetFaceIndex,
-    addPathPoint,
-    setIntersectionPoints,
-  } = useKnifeToolStore();
+  // Knife tool (click handling extracted to hook)
+  const { handleKnifeClick, isKnifeActive, drawingPath, targetFaceIndex } = useKnifeToolClick(editingObjectId, meshRef);
 
   // Get material assigned to this object - subscribe to materials Map for reactivity
   const objectMaterials = useMaterialsStore((state) => state.objectMaterials);
@@ -488,7 +478,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       if (assignedMaterial.albedoMap) {
         const tex = getTexture(assignedMaterial.albedoMap);
         if (tex) {
-          const loader = new THREE.TextureLoader();
+          const loader = sharedTextureLoader;
           matProps.map = loader.load(tex.url);
         }
       }
@@ -496,7 +486,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       if (assignedMaterial.normalMap) {
         const tex = getTexture(assignedMaterial.normalMap);
         if (tex) {
-          const loader = new THREE.TextureLoader();
+          const loader = sharedTextureLoader;
           matProps.normalMap = loader.load(tex.url);
         }
       }
@@ -504,7 +494,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       if (assignedMaterial.roughnessMap) {
         const tex = getTexture(assignedMaterial.roughnessMap);
         if (tex) {
-          const loader = new THREE.TextureLoader();
+          const loader = sharedTextureLoader;
           matProps.roughnessMap = loader.load(tex.url);
         }
       }
@@ -512,7 +502,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       if (assignedMaterial.metallicMap) {
         const tex = getTexture(assignedMaterial.metallicMap);
         if (tex) {
-          const loader = new THREE.TextureLoader();
+          const loader = sharedTextureLoader;
           matProps.metalnessMap = loader.load(tex.url);
         }
       }
@@ -520,7 +510,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       if (assignedMaterial.emissionMap) {
         const tex = getTexture(assignedMaterial.emissionMap);
         if (tex) {
-          const loader = new THREE.TextureLoader();
+          const loader = sharedTextureLoader;
           matProps.emissiveMap = loader.load(tex.url);
         }
       }
@@ -528,7 +518,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       if (assignedMaterial.aoMap) {
         const tex = getTexture(assignedMaterial.aoMap);
         if (tex) {
-          const loader = new THREE.TextureLoader();
+          const loader = sharedTextureLoader;
           matProps.aoMap = loader.load(tex.url);
         }
       }
@@ -536,7 +526,7 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
       if (assignedMaterial.displacementMap) {
         const tex = getTexture(assignedMaterial.displacementMap);
         if (tex) {
-          const loader = new THREE.TextureLoader();
+          const loader = sharedTextureLoader;
           matProps.displacementMap = loader.load(tex.url);
         }
       }
@@ -634,123 +624,8 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     event.stopPropagation();
 
     // Priority 1: Knife tool (if active in edit mode)
-    if (isKnifeActive && isEditMode && editingObjectId === object.id && meshRef.current) {
-      // Filter intersections to only use hits on Mesh objects (not lineSegments/helpers)
-      const allIntersections = (event as any).intersections || [];
-      const intersection = allIntersections.find(
-        (i: any) => i.object?.isMesh
-      );
-      if (intersection) {
-        // Snap to QMesh face edges (not BufferGeometry triangulation diagonals)
-        const sceneObjForSnap = useObjectsStore.getState().getObject(editingObjectId);
-        const qMesh = sceneObjForSnap?.qMesh;
-
-        let snapPoint: THREE.Vector3;
-
-        if (qMesh && intersection.faceIndex !== undefined) {
-          // Find the QMesh face from the triangle index
-          const qFaceId = qMesh.getFaceIdFromTriangleIndex(intersection.faceIndex);
-          const qFace = qFaceId ? qMesh.faces.get(qFaceId) : null;
-
-          if (qFace) {
-            // Snap to nearest REAL edge of the QMesh face
-            const faceVerts = qFace.getVertices();
-            let bestDist = Infinity;
-            let bestSnapPoint: THREE.Vector3 | null = null;
-
-            for (let i = 0; i < faceVerts.length; i++) {
-              const p0 = faceVerts[i].position.clone();
-              const p1 = faceVerts[(i + 1) % faceVerts.length].position.clone();
-
-              // Transform to world space
-              meshRef.current.localToWorld(p0);
-              meshRef.current.localToWorld(p1);
-
-              const candidate = closestPointOnLine(p0, p1, intersection.point);
-              const dist = intersection.point.distanceTo(candidate);
-
-              if (dist < bestDist) {
-                bestDist = dist;
-                bestSnapPoint = candidate;
-              }
-            }
-
-            if (bestSnapPoint && bestDist < 1.5) {
-              snapPoint = bestSnapPoint;
-              console.log('[KnifeTool] Snapped to QMesh edge, dist:', bestDist.toFixed(3));
-            } else {
-              console.warn('[KnifeTool] Click must be near an edge. Click closer to an edge.');
-              return;
-            }
-          } else {
-            console.warn('[KnifeTool] Could not find QMesh face for triangle', intersection.faceIndex);
-            return;
-          }
-        } else {
-          // Fallback to BufferGeometry edge snapping
-          const nearbyEdge = findNearbyEdge(
-            intersection.point,
-            meshRef.current.geometry,
-            meshRef.current,
-            1.5
-          );
-
-          if (nearbyEdge) {
-            const positions = meshRef.current.geometry.attributes.position;
-            const [v0Idx, v1Idx] = nearbyEdge;
-            const p0 = new THREE.Vector3().fromBufferAttribute(positions, v0Idx);
-            const p1 = new THREE.Vector3().fromBufferAttribute(positions, v1Idx);
-            meshRef.current.localToWorld(p0);
-            meshRef.current.localToWorld(p1);
-            snapPoint = closestPointOnLine(p0, p1, intersection.point);
-          } else {
-            console.warn('[KnifeTool] Click must be near an edge. Click closer to an edge.');
-            return;
-          }
-        }
-
-        // Validate: second point must be on the same QMesh face
-        if (targetFaceIndex !== null && intersection.faceIndex !== targetFaceIndex) {
-          const sceneObj = useObjectsStore.getState().getObject(editingObjectId);
-          if (sceneObj?.qMesh) {
-            const targetQFace = sceneObj.qMesh.getFaceIdFromTriangleIndex(targetFaceIndex);
-            const clickedQFace = sceneObj.qMesh.getFaceIdFromTriangleIndex(intersection.faceIndex);
-            if (targetQFace && clickedQFace && targetQFace === clickedQFace) {
-              console.log('[KnifeTool] Same QMesh face', targetQFace, '- OK');
-            } else {
-              console.warn('[KnifeTool] Second point must be on the same face!', targetQFace, '!=', clickedQFace);
-              return;
-            }
-          } else {
-            console.warn('[KnifeTool] Second point must be on the same face!');
-            return;
-          }
-        }
-
-        // Only accept 2 points max
-        if (drawingPath.length >= 2) {
-          console.warn('[KnifeTool] Already have 2 points - click Confirm or press Enter');
-          return;
-        }
-
-        // Add point to cutting path (pass face index for first point)
-        addPathPoint(snapPoint, intersection.faceIndex);
-
-        // After second point, calculate intersections and auto-confirm
-        if (drawingPath.length === 1) {
-          const currentPath = [...drawingPath, snapPoint];
-          const intersections = findLineIntersections(
-            currentPath[0],
-            currentPath[1],
-            meshRef.current.geometry,
-            meshRef.current
-          );
-
-          console.log('[KnifeTool] Total intersections:', intersections.length);
-          setIntersectionPoints(intersections);
-
-        }
-      }
+    if (isKnifeActive && isEditMode && editingObjectId === object.id) {
+      handleKnifeClick(event);
       return;
     }
 
@@ -950,50 +825,6 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
     }
   }
 
-  // TEMPORARILY DISABLED FOR DEBUGGING - Bounding box causing memory leaks
-  // const boundingBoxRef = useRef<THREE.BoxGeometry | null>(null);
-  // const invisibleMaterial = useMemo(() => {
-  //   return new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
-  // }, []);
-  // useEffect(() => {
-  //   return () => {
-  //     if (invisibleMaterial) {
-  //       invisibleMaterial.dispose();
-  //     }
-  //   };
-  // }, [invisibleMaterial]);
-  // useEffect(() => {
-  //   if (boundingBoxRef.current) {
-  //     boundingBoxRef.current.dispose();
-  //     boundingBoxRef.current = null;
-  //   }
-  //   if (!geometry) {
-  //     return;
-  //   }
-  //   geometry.computeBoundingBox();
-  //   if (!geometry.boundingBox) {
-  //     return;
-  //   }
-  //   const box = geometry.boundingBox;
-  //   const center = new THREE.Vector3();
-  //   const size = new THREE.Vector3();
-  //   box.getCenter(center);
-  //   box.getSize(size);
-  //   const boxGeo = new THREE.BoxGeometry(
-  //     Math.max(size.x * 1.1, 0.2),
-  //     Math.max(size.y * 1.1, 0.2),
-  //     Math.max(size.z * 1.1, 0.2)
-  //   );
-  //   boxGeo.translate(center.x, center.y, center.z);
-  //   boundingBoxRef.current = boxGeo;
-  //   return () => {
-  //     if (boundingBoxRef.current) {
-  //       boundingBoxRef.current.dispose();
-  //       boundingBoxRef.current = null;
-  //     }
-  //   };
-  // }, [geometry]);
-
   // Render meshes with hierarchy support
   return (
     <group position={object.position} rotation={object.rotation} scale={object.scale}>
@@ -1022,15 +853,6 @@ export function SceneObject({ object, isSelected, onSelect }: SceneObjectProps) 
             <QMeshWireframe qMesh={object.qMesh} color={materialColor} />
           )}
 
-          {/* Invisible bounding box for easier selection - TEMPORARILY DISABLED for debugging */}
-          {/* {!isEditMode && boundingBoxRef.current && (
-            <mesh
-              geometry={boundingBoxRef.current}
-              material={invisibleMaterial}
-              onClick={handleClick}
-              visible={false}
-            />
-          )} */}
         </>
       )}
 
